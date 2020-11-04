@@ -6,24 +6,29 @@
 ###################
 from models import SimpleModel
 from dataset import *
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
+from sklearn.metrics import *
+from statistics import mean
 import torch
+import torchvision
 import torch.optim as optim
 import torch.nn as nn
 import matplotlib.pyplot as plt
+import pickle
 
 
 #######################
 ###### FUNCTIONS ######
 #######################
-def inspect_dataset(train_df, dev_df):
+def inspect_dataset(train_dataset, dev_dataset):
     """
-    :param train_df:
-    :param dev_df:
-    :return:
+    :param train_dataset:
+    :param dev_dataset:
+    :return counters_train, counters_dev:
     """
-    train_size = train_df.__len__()
-    dev_size = dev_df.__len__()
+    print("Start Inspecting Dataset")
+    train_size = train_dataset.__len__()
+    dev_size = dev_dataset.__len__()
     print("Number of train images: {}".format(train_size))
     print("Number of dev images: {}".format(dev_size))
     counters_train = {}
@@ -32,13 +37,13 @@ def inspect_dataset(train_df, dev_df):
         counters_train[value] = 0
         counters_dev[value] = 0
 
-    for idx in range(train_df.__len__()):
-        item = train_df.__getitem__(idx)
+    for idx in range(train_dataset.__len__()):
+        item = train_dataset.__getitem__(idx)
         label = label_names()[item[1]]
         counters_train[label] = counters_train[label] + 1
 
-    for idx in range(dev_df.__len__()):
-        item = dev_df.__getitem__(idx)
+    for idx in range(dev_dataset.__len__()):
+        item = dev_dataset.__getitem__(idx)
         label = label_names()[item[1]]
         counters_dev[label] = counters_dev[label] + 1
 
@@ -49,51 +54,138 @@ def inspect_dataset(train_df, dev_df):
     print("Dev dataset:")
     for cls in counters_dev:
         print("Class {}. size: {}. Percentage: {}".format(cls, counters_dev[cls], (counters_dev[cls] / train_size)))
+
+    print("End Inspecting Dataset")
+    print("==============================================================================")
+    return counters_train, counters_dev
 # End function
 
 
-def evaluate_model(train_df, dev_df, epochs=2):
+def evaluate_model(model, data_loader, counters_dev):
     """
-    :param train_df:
-    :param dev_df:
-    :param epochs:
-    :return:
+    :param counters_dev:
+    :param model:
+    :param data_loader:
     """
-    model = SimpleModel()
-    model.load(path='./data/pre_trained.ckpt')
-    model.eval()
-    val_losses = []
-    loss_fn = nn.CrossEntropyLoss()
-    dev_loader = DataLoader(dataset=dev_df, batch_size=16, shuffle=True)
-    for epoch in range(epochs):
-        with torch.no_grad():
-            for x_val, y_val in dev_loader:
-                label_pred = model(x_val)
-                val_loss = loss_fn(label_pred, y_val)
-                val_losses.append(val_loss.item())
+    print("Start Evaluate Model")
+    f1_scores, recalls, precisions = [], [], []
+    num_of_classes = label_names().__len__()
+    class_correct = list(0. for i in range(num_of_classes))
+    class_total = list(0. for i in range(num_of_classes))
 
-    plot(val_losses)
-    print(model.state_dict())
+    with torch.no_grad():
+        for idx, data in enumerate(data_loader, 0):
+            model.eval()
+
+            inputs, labels = data
+            outputs = model(inputs)
+            _, predicted = torch.max(outputs.data, 1)
+            c = (predicted == labels).squeeze()
+            precisions.append(precision_score(labels, predicted, average='weighted', zero_division=1))
+            recalls.append(recall_score(labels, predicted, average='weighted'))
+            f1_scores.append(f1_score(labels, predicted, average='weighted'))
+            for i in range(num_of_classes):
+                label = labels[i]
+                class_correct[label] += c[i].item()
+                class_total[label] += 1
+
+    for i in range(label_names().__len__()):
+        label = label_names()[i]
+        print("Size of %5s : %2d" % (label, counters_dev[label]))
+        print('Accuracy of %5s : %2d %%' % (label, 100 * class_correct[i] / class_total[i]))
+
+    print("F1-Score: {}.\t Recall: {}.\t Precision: {}.".format(mean(f1_scores), mean(recalls), mean(precisions)))
+    print("End Evaluate Model")
+    print("==============================================================================")
 # End function
 
 
-def plot(values):
+def train_model(model, data_loader, parameters):
+    model_states = []
+    losses = []
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(params=model.parameters(), lr=parameters['lr'], betas=parameters['betas'])
+
+    for epoch in range(parameters['epochs']):
+        running_loss = 0.0
+        for idx, data in enumerate(data_loader, 0):
+            model.train()
+
+            inputs, labels = data
+            optimizer.zero_grad()
+            outputs = model(inputs)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+
+            running_loss += loss.item()
+            if idx % 50 == 49:
+                if epoch + 1 >= 10:
+                    model_states.append({
+                        'state_dict': model.state_dict(),
+                        'loss': running_loss / 50
+                    })
+                losses.append(running_loss / 50)
+                print('[%d, %5d] loss: %.3f' % (epoch + 1, idx + 1, running_loss / 50))
+                running_loss = 0.0
+
+    best_model = min(model_states, key=lambda x: x['loss'])
+    torch.save({'model_state_dict': best_model}, './data/trained.ckpt')
+    plot(losses, "Model Loss", "loss", "epoch")
+    print("==============================================================================")
+# End function
+
+
+def create_data_loader(dataset, counters, parameters):
+    labels = [label for _, label in dataset]
+    class_weights = [dataset.__len__() / counters[label] for label in label_names().values()]
+    weights = [class_weights[labels[i]] for i in range(dataset.__len__())]
+    sampler = WeightedRandomSampler(weights=weights, num_samples=dataset.__len__())
+    data_loader = DataLoader(dataset=dataset, batch_size=parameters['batch_size'], sampler=sampler)
+    return data_loader
+# End function
+
+
+def plot(values, title, y_label, x_label):
     plt.plot(values)
-    plt.title("model evaluation")
-    plt.ylabel("accuracy")
-    plt.xlabel("epoch")
+    plt.title(title)
+    plt.ylabel(y_label)
+    plt.xlabel(x_label)
     plt.legend(['val'], loc='upper left')
-    plt.show()
+    plt.savefig('./{}.png'.format(title.replace(' ', '_')))
 # End function
 
 
 def main():
-    train_df = get_dataset_as_torch_dataset(path='./data/train.pickle')
-    dev_df = get_dataset_as_torch_dataset(path='./data/dev.pickle')
+    # Create params dict for learning process
+    parameters = {
+        'num_classes': label_names().__len__(),
+        'batch_size': 25,
+        'lr': 1e-3,
+        'betas': (0.9, 0.999),
+        'epochs': 15
+    }
+
+    train_dataset = get_dataset_as_torch_dataset(path='./data/train.pickle')
+    dev_dataset = get_dataset_as_torch_dataset(path='./data/dev.pickle')
+
     # Inspect dataset:
-    inspect_dataset(train_df, dev_df)
-    # Evaluate given model
-    evaluate_model(train_df, dev_df, 2)
+    counters_train, counters_dev = inspect_dataset(train_dataset, dev_dataset)
+
+    # Load model
+    model = SimpleModel()
+    model.load(path='./data/pre_trained.ckpt')
+
+    # Create Data Loaders for Train Dataset and Dev Dataset
+    train_loader = create_data_loader(train_dataset, counters_train, parameters)
+    dev_loader = create_data_loader(train_dataset, counters_dev, parameters)
+
+    # Evaluate the given model
+    evaluate_model(model, dev_loader, counters_dev)
+    # Train the given model
+    train_model(model, train_loader, parameters)
+    # model.load(path='./data/trained.ckpt')
+    evaluate_model(model, dev_loader, counters_dev)
 # End function
 
 
