@@ -4,170 +4,39 @@
 ###################
 ##### IMPORTS #####
 ###################
-from models import SimpleModel
-from dataset import *
-from torch.utils.data import DataLoader, WeightedRandomSampler
-from sklearn.metrics import *
-from statistics import mean
-import torch
-import torchvision
-import torch.optim as optim
+from models import *
+from utils import *
+from evaluator import *
+from trainer import *
+import torchvision.transforms as transforms
 import torch.nn as nn
-import matplotlib.pyplot as plt
-import pickle
+import os
 
 
-#######################
-###### FUNCTIONS ######
-#######################
-def inspect_dataset(train_dataset, dev_dataset):
-    """
-    :param train_dataset:
-    :param dev_dataset:
-    :return counters_train, counters_dev:
-    """
-    print("Start Inspecting Dataset")
-    train_size = train_dataset.__len__()
-    dev_size = dev_dataset.__len__()
-    print("Number of train images: {}".format(train_size))
-    print("Number of dev images: {}".format(dev_size))
-    counters_train = {}
-    counters_dev = {}
-    for value in label_names().values():
-        counters_train[value] = 0
-        counters_dev[value] = 0
-
-    for idx in range(train_dataset.__len__()):
-        item = train_dataset.__getitem__(idx)
-        label = label_names()[item[1]]
-        counters_train[label] = counters_train[label] + 1
-
-    for idx in range(dev_dataset.__len__()):
-        item = dev_dataset.__getitem__(idx)
-        label = label_names()[item[1]]
-        counters_dev[label] = counters_dev[label] + 1
-
-    print("Train dataset:")
-    for cls in counters_train:
-        print("Class {}. size: {}. Percentage: {}".format(cls, counters_train[cls], (counters_train[cls] / train_size)))
-
-    print("Dev dataset:")
-    for cls in counters_dev:
-        print("Class {}. size: {}. Percentage: {}".format(cls, counters_dev[cls], (counters_dev[cls] / train_size)))
-
-    print("End Inspecting Dataset")
-    print("==============================================================================")
-    return counters_train, counters_dev
-# End function
-
-
-def evaluate_model(model, data_loader, counters_dev):
-    """
-    :param counters_dev:
-    :param model:
-    :param data_loader:
-    """
-    print("Start Evaluate Model")
-    f1_scores, recalls, precisions = [], [], []
-    num_of_classes = label_names().__len__()
-    class_correct = list(0. for i in range(num_of_classes))
-    class_total = list(0. for i in range(num_of_classes))
-
-    with torch.no_grad():
-        for idx, data in enumerate(data_loader, 0):
-            model.eval()
-
-            inputs, labels = data
-            outputs = model(inputs)
-            _, predicted = torch.max(outputs.data, 1)
-            c = (predicted == labels).squeeze()
-            precisions.append(precision_score(labels, predicted, average='weighted', zero_division=1))
-            recalls.append(recall_score(labels, predicted, average='weighted'))
-            f1_scores.append(f1_score(labels, predicted, average='weighted'))
-            for i in range(num_of_classes):
-                label = labels[i]
-                class_correct[label] += c[i].item()
-                class_total[label] += 1
-
-    for i in range(label_names().__len__()):
-        label = label_names()[i]
-        print("Size of %5s : %2d" % (label, counters_dev[label]))
-        print('Accuracy of %5s : %2d %%' % (label, 100 * class_correct[i] / class_total[i]))
-
-    print("F1-Score: {}.\t Recall: {}.\t Precision: {}.".format(mean(f1_scores), mean(recalls), mean(precisions)))
-    print("End Evaluate Model")
-    print("==============================================================================")
-# End function
-
-
-def train_model(model, data_loader, parameters):
-    model_states = []
-    losses = []
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(params=model.parameters(), lr=parameters['lr'], betas=parameters['betas'])
-
-    for epoch in range(parameters['epochs']):
-        running_loss = 0.0
-        for idx, data in enumerate(data_loader, 0):
-            model.train()
-
-            inputs, labels = data
-            optimizer.zero_grad()
-            outputs = model(inputs)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
-
-            running_loss += loss.item()
-            if idx % 50 == 49:
-                if epoch + 1 >= 10:
-                    model_states.append({
-                        'state_dict': model.state_dict(),
-                        'loss': running_loss / 50
-                    })
-                losses.append(running_loss / 50)
-                print('[%d, %5d] loss: %.3f' % (epoch + 1, idx + 1, running_loss / 50))
-                running_loss = 0.0
-
-    best_model = min(model_states, key=lambda x: x['loss'])
-    torch.save({'model_state_dict': best_model}, './data/trained.ckpt')
-    plot(losses, "Model Loss", "loss", "epoch")
-    print("==============================================================================")
-# End function
-
-
-def create_data_loader(dataset, counters, parameters):
-    labels = [label for _, label in dataset]
-    class_weights = [dataset.__len__() / counters[label] for label in label_names().values()]
-    weights = [class_weights[labels[i]] for i in range(dataset.__len__())]
-    sampler = WeightedRandomSampler(weights=weights, num_samples=dataset.__len__())
-    data_loader = DataLoader(dataset=dataset, batch_size=parameters['batch_size'], sampler=sampler)
-    return data_loader
-# End function
-
-
-def plot(values, title, y_label, x_label):
-    plt.plot(values)
-    plt.title(title)
-    plt.ylabel(y_label)
-    plt.xlabel(x_label)
-    plt.legend(['val'], loc='upper left')
-    plt.savefig('./{}.png'.format(title.replace(' ', '_')))
-# End function
-
-
+##################
+###### MAIN ######
+##################
 def main():
-    # Create params dict for learning process
-    parameters = {
-        'num_classes': label_names().__len__(),
-        'batch_size': 25,
-        'lr': 1e-3,
-        'betas': (0.9, 0.999),
-        'epochs': 15
-    }
-
+    if os.path.exists('./models') is not True:
+        os.mkdir('./models/')
+    if os.path.exists('./graphs') is not True:
+        os.mkdir('./graphs/')
     train_dataset = get_dataset_as_torch_dataset(path='./data/train.pickle')
     dev_dataset = get_dataset_as_torch_dataset(path='./data/dev.pickle')
+
+    # Create params dict for learning process
+    parameters = {
+        'train_size': train_dataset.__len__(),
+        'dev_size': dev_dataset.__len__(),
+        'num_classes': label_names().__len__(),
+        'batch_size': 15,
+        'lr': 1e-3,
+        'betas': (0.9, 0.999),
+        'epochs': 20,
+        'criterion': nn.CrossEntropyLoss(),
+        'epsilon': 0.15,
+        'lrs': [1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 1e+1, 1e+2, 1e+3, 1e+4, 1e+5]
+    }
 
     # Inspect dataset:
     counters_train, counters_dev = inspect_dataset(train_dataset, dev_dataset)
@@ -177,15 +46,36 @@ def main():
     model.load(path='./data/pre_trained.ckpt')
 
     # Create Data Loaders for Train Dataset and Dev Dataset
-    train_loader = create_data_loader(train_dataset, counters_train, parameters)
-    dev_loader = create_data_loader(train_dataset, counters_dev, parameters)
+    # train_dataset = augment_dataset(train_dataset)
+    train_loader = create_data_loader(train_dataset, counters_train, parameters, True)
+    dev_loader = create_data_loader(dev_dataset, counters_dev, parameters, False)
 
-    # Evaluate the given model
-    evaluate_model(model, dev_loader, counters_dev)
-    # Train the given model
-    train_model(model, train_loader, parameters)
-    # model.load(path='./data/trained.ckpt')
-    evaluate_model(model, dev_loader, counters_dev)
+    # Evaluate the given model on dev dataset
+    evaluator = Evaluator(model, dev_loader, parameters['criterion'],
+                          counters_dev, parameters['num_classes'], "evaluate_pre_train")
+    evaluator.__evaluate__()
+
+    # Train the given model and evaluate it
+    trainer = Trainer(model, train_loader, parameters['criterion'], parameters['lr'],
+                      parameters['betas'], parameters['epochs'], parameters['batch_size'],
+                      parameters['num_classes'], parameters['epsilon'], "trainer")
+    trainer.__train__(train_loader, True)
+
+    evaluator = Evaluator(model, dev_loader, parameters['criterion'],
+                          counters_dev, parameters['num_classes'], "evaluate_trainer")
+    evaluator.__evaluate__()
+
+    # # Model improvements
+    # trainer = Trainer(model, dev_loader, parameters['criterion'], parameters['lr'],
+    #                   parameters['betas'], 1, parameters['batch_size'],
+    #                   parameters['num_classes'], "improved_trainer")
+    # trainer.__train__(train_loader, False)
+    # mislabeled = trainer.mislabeled
+    # print(mislabeled)
+    #
+    # transform = transforms.Compose(
+    #     [transforms.ToTensor(),
+    #      transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 # End function
 
 
