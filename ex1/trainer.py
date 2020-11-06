@@ -21,7 +21,7 @@ class Trainer:
     """
     Trainer class for training a given model
     """
-    def __init__(self, model: SimpleModel, dataset: DataLoader, criterion, lr, betas, epochs, batch_size, num_classes, epsilion, name):
+    def __init__(self, model: SimpleModel, dataset: DataLoader, criterion, lr, betas, epochs, batch_size, num_classes, epsilon, name):
         self.model = model
         self.dataset = dataset
         self.lr = lr
