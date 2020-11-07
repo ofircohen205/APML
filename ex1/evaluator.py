@@ -6,16 +6,10 @@
 ###################
 from models import SimpleModel
 from dataset import *
-from utils import *
-from torch.utils.data import DataLoader, WeightedRandomSampler
+from torch.utils.data import DataLoader
 from sklearn.metrics import *
-from statistics import mean
 import torch
-import torchvision
-import torch.optim as optim
-import torch.nn as nn
-import matplotlib.pyplot as plt
-import pickle
+torch.manual_seed(17)
 
 
 #####################
@@ -25,7 +19,7 @@ class Evaluator:
     """
     Evaluator class for evaluating a given model
     """
-    def __init__(self, model, dataset, criterion, counters, num_classes, name):
+    def __init__(self, model: SimpleModel, dataset: DataLoader, criterion, counters: dict, num_classes: int, name: str):
         """
         :param model: the model we wish to evaluate
         :param dataset: the data we wish to evaluate our model on
@@ -40,7 +34,7 @@ class Evaluator:
         self.name = name
         self.predicted = torch.zeros(0, dtype=torch.long)
         self.labels = torch.zeros(0, dtype=torch.long)
-        self.losses = []
+        self.mislabeled = []
 
     def __evaluate__(self):
         print("Start Evaluate Model")
@@ -52,10 +46,8 @@ class Evaluator:
             for data in self.dataset:
                 inputs, labels = data
                 outputs = self.model(inputs)
-                loss = self.criterion(outputs, labels)
                 _, predicted = torch.max(outputs.data, 1)
                 c = (predicted == labels).squeeze()
-
                 self.predicted = torch.cat([self.predicted, predicted.view(-1)])
                 self.labels = torch.cat([self.labels, labels.view(-1)])
 
@@ -69,10 +61,23 @@ class Evaluator:
             print("Size of %5s : %2d" % (label, self.counters[label]))
             print('Accuracy of %5s : %2d %%' % (label, 100 * class_correct[idx] / class_total[idx]))
 
-        plot_confusion_matrix_sns(
-            confusion_matrix(self.labels.numpy(), self.predicted.numpy()),
-            "{} confusion matrix".format(self.name),
-            label_names().values())
         print("End Evaluate Model")
+        print("==============================================================================")
+
+    def __get_mislabeled__(self):
+        print("Start get mislabeled images")
+        self.model.eval()
+        with torch.no_grad():
+            for idx, data in enumerate(self.dataset, 0):
+                inputs, labels = data
+                outputs = self.model(inputs)
+                loss = self.criterion(outputs, labels)
+                _, predicted = torch.max(outputs.data, 1)
+                self.mislabeled.append({'index': idx,
+                                        'labels': labels.item(),
+                                        'predicted': predicted.item(),
+                                        'loss': loss.item()})
+
+        print("End get mislabeled images")
         print("==============================================================================")
 # End class

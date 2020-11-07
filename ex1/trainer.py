@@ -5,13 +5,11 @@
 ##### IMPORTS #####
 ###################
 from models import SimpleModel
-from dataset import *
-from utils import *
-from sklearn.metrics import *
+from torch.utils.data import DataLoader
 import torch
-import torchvision
 import torch.optim as optim
-import torch.nn as nn
+import os
+torch.manual_seed(17)
 
 
 #####################
@@ -21,7 +19,20 @@ class Trainer:
     """
     Trainer class for training a given model
     """
-    def __init__(self, model: SimpleModel, dataset: DataLoader, criterion, lr, betas, epochs, batch_size, num_classes, epsilon, name):
+    def __init__(self, model: SimpleModel, dataset: DataLoader, criterion, lr: float, betas: list,
+                 epochs: int, batch_size: int, num_classes: int, epsilon: float, name: str, path: str):
+        """
+        :param model: the model we wish to evaluate
+        :param dataset: the data we wish to evaluate our model on
+        :param criterion: loss function
+        :param lr: learning rate for optimizer
+        :param betas: betas for optimizer
+        :param epochs: number of epochs
+        :param batch_size: what is the size of the batched inputs
+        :param num_classes: number of classes the model classifies
+        :param epsilon: if running_loss < epsilon then save the model_state
+        :param name: for saving the model_state and plots
+        """
         self.model = model
         self.dataset = dataset
         self.lr = lr
@@ -32,56 +43,52 @@ class Trainer:
         self.num_classes = num_classes
         self.name = name
         self.epsilon = epsilon
+        self.ckpt = os.path.join(path, "{}.ckpt".format(self.name))
         self.model_states = []
         self.losses = []
         self.accuracies = []
-        self.mislabeled = []
 
-    def __train__(self, dataset, save):
+    def __train__(self, save):
         print("Start Train Model")
         total = 0.0
         correct = 0.0
-        index = 0
-        optimizer = optim.Adam(params=self.model.parameters(), lr=self.lr, betas=self.betas)
+        optimizer = optim.Adam(params=self.model.parameters(), lr=self.lr)
         self.model.train()
         for epoch in range(self.epochs):
-            last_running_loss = 0.0
             running_loss = 0.0
             for idx, data in enumerate(self.dataset, 0):
-                index += 1
-                inputs, labels = data
-                optimizer.zero_grad()
-                outputs = self.model(inputs)
-                loss = self.criterion(outputs, labels)
-                self.mislabeled.append({'idx': index, 'loss': loss.item()})
-                _, predicted = torch.max(outputs.data, 1)
-                loss.backward()
-                optimizer.step()
-                running_loss += loss.item()
-                total += labels.size(0)
-                correct = (predicted == labels).sum().item()
+                running_loss, total, correct = self.__fit_predict__(data, optimizer, running_loss, total, correct)
 
                 if idx % 200 == 199:
-                    running_loss = running_loss / 200
-                    last_running_loss = running_loss
-                    if running_loss < self.epsilon and running_loss - last_running_loss < 0.1:
-                        self.model_states.append({
-                            'state_dict': self.model.state_dict(),
-                            'loss': running_loss
-                        })
-                    self.losses.append(running_loss)
-                    self.accuracies.append(correct / total)
-                    print('[%d, %5d] loss: %.3f' % (epoch + 1, idx + 1, running_loss))
+                    self.__collect_data__(epoch, idx, running_loss, save, total, correct)
                     running_loss = 0.0
                     total = 0.0
                     correct = 0.0
 
-        if save:
-            self.model_states = sorted(self.model_states, key=lambda x: x['loss'])
-            torch.save({'model_state_dict': self.model_states[0]['state_dict']}, './models/trained_{}.ckpt'.format(current_time()))
-            plot(self.losses, "{} Loss".format(self.name), "loss", "epoch")
-            plot(self.accuracies, "{} Accuracy".format(self.name), "accuracy", "epoch")
-
-        sorted(self.mislabeled, key=lambda x: x['loss']).reverse()
+        print("End Train Model")
         print("==============================================================================")
+
+    def __fit_predict__(self, data, optimizer, running_loss, total, correct):
+        inputs, labels = data
+        optimizer.zero_grad()
+        outputs = self.model(inputs)
+        loss = self.criterion(outputs, labels)
+        _, predicted = torch.max(outputs.data, 1)
+        loss.backward()
+        optimizer.step()
+        running_loss += loss.item()
+        total += labels.size(0)
+        correct += (predicted == labels).sum().item()
+        return running_loss, total, correct
+
+    def __collect_data__(self, epoch, idx, running_loss, save, total, correct):
+        running_loss = running_loss / 200
+        if save and running_loss < self.epsilon:
+            self.model_states.append({
+                'state_dict': self.model.state_dict(),
+                'loss': running_loss
+            })
+        self.losses.append(running_loss)
+        self.accuracies.append(correct / total)
+        print('[%d, %5d] loss: %.3f' % (epoch + 1, idx + 1, running_loss))
 # End class

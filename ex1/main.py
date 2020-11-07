@@ -4,78 +4,78 @@
 ###################
 ##### IMPORTS #####
 ###################
-from models import *
+from models import SimpleModel
+from evaluator import Evaluator
+from trainer import Trainer
+from adversarial import Adversarial
 from utils import *
-from evaluator import *
-from trainer import *
-import torchvision.transforms as transforms
-import torch.nn as nn
-import os
+import torch
+torch.manual_seed(17)
 
 
 ##################
 ###### MAIN ######
 ##################
 def main():
-    if os.path.exists('./models') is not True:
-        os.mkdir('./models/')
-    if os.path.exists('./graphs') is not True:
-        os.mkdir('./graphs/')
-    train_dataset = get_dataset_as_torch_dataset(path='./data/train.pickle')
-    dev_dataset = get_dataset_as_torch_dataset(path='./data/dev.pickle')
-
-    # Create params dict for learning process
-    parameters = {
-        'train_size': train_dataset.__len__(),
-        'dev_size': dev_dataset.__len__(),
-        'num_classes': label_names().__len__(),
-        'batch_size': 15,
-        'lr': 1e-3,
-        'betas': (0.9, 0.999),
-        'epochs': 20,
-        'criterion': nn.CrossEntropyLoss(),
-        'epsilon': 0.15,
-        'lrs': [1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 1e+1, 1e+2, 1e+3, 1e+4, 1e+5]
-    }
-
-    # Inspect dataset:
-    counters_train, counters_dev = inspect_dataset(train_dataset, dev_dataset)
+    torch_train_dataset, torch_dev_dataset, parameters = init()
 
     # Load model
-    model = SimpleModel()
-    model.load(path='./data/pre_trained.ckpt')
+    pre_trained = SimpleModel()
+    pre_trained.load(path=parameters['pretrained_path'])
+
+    # Question 1
+    # Inspect dataset:
+    counters_train, counters_dev = inspect_dataset(torch_train_dataset, torch_dev_dataset)
 
     # Create Data Loaders for Train Dataset and Dev Dataset
-    # train_dataset = augment_dataset(train_dataset)
-    train_loader = create_data_loader(train_dataset, counters_train, parameters, True)
-    dev_loader = create_data_loader(dev_dataset, counters_dev, parameters, False)
+    train_loader = create_data_loader(torch_train_dataset, counters_train, parameters, True)
+    dev_loader = create_data_loader(torch_dev_dataset, counters_dev, parameters, False)
 
-    # Evaluate the given model on dev dataset
-    evaluator = Evaluator(model, dev_loader, parameters['criterion'],
-                          counters_dev, parameters['num_classes'], "evaluate_pre_train")
-    evaluator.__evaluate__()
+    evaluate(pre_trained, dev_loader, parameters, counters_dev, "pre_trained_eval", True)
+    trainer = train(pre_trained, train_loader, parameters, "pre_trained_train", True)
 
-    # Train the given model and evaluate it
-    trainer = Trainer(model, train_loader, parameters['criterion'], parameters['lr'],
-                      parameters['betas'], parameters['epochs'], parameters['batch_size'],
-                      parameters['num_classes'], parameters['epsilon'], "trainer")
-    trainer.__train__(train_loader, True)
+    # Load the best state of the model we've trained
+    trained = SimpleModel()
+    trained.load(path=trainer.ckpt)
+    evaluate(trained, dev_loader, parameters, counters_dev, "trained_eval", True)
 
-    evaluator = Evaluator(model, dev_loader, parameters['criterion'],
-                          counters_dev, parameters['num_classes'], "evaluate_trainer")
-    evaluator.__evaluate__()
+    # Model improvements - get mislabeled images
+    print("Improving given model:")
+    mislabeled_loader = DataLoader(dataset=torch_train_dataset)
+    improved_model = SimpleModel()
+    improved_model.load(path=trainer.ckpt)
+    evaluator = evaluate(improved_model, mislabeled_loader, parameters, counters_dev, "improved_model_eval", False)
+    fix_dataset(evaluator, torch_train_dataset, parameters['fixed_dataset'])
 
-    # # Model improvements
-    # trainer = Trainer(model, dev_loader, parameters['criterion'], parameters['lr'],
-    #                   parameters['betas'], 1, parameters['batch_size'],
-    #                   parameters['num_classes'], "improved_trainer")
-    # trainer.__train__(train_loader, False)
-    # mislabeled = trainer.mislabeled
-    # print(mislabeled)
-    #
-    # transform = transforms.Compose(
-    #     [transforms.ToTensor(),
-    #      transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+    torch_train_dataset_fixed = get_dataset_as_torch_dataset(path=parameters['fixed_dataset'])
+    train_loader = create_data_loader(torch_train_dataset_fixed, counters_train, parameters, True)
+    counters_train, counters_dev = inspect_dataset(torch_train_dataset_fixed, torch_dev_dataset)
+
+    test_model = SimpleModel()
+    test_model.load(path=parameters['pretrained_path'])
+    trainer = train(test_model, train_loader, parameters, "train_improved_model_train", True)
+    eval_model = SimpleModel()
+    eval_model.load(path=trainer.ckpt)
+    evaluate(eval_model, dev_loader, parameters, counters_dev, "improved_model_eval", True)
+
+    # # Question 2 - Playing with learning rate
+    # models = [SimpleModel().load(trainer.ckpt) for _ in range(len(parameters['lrs']))]
+    # for lr in parameters['lrs']:
+    #     trainer = Trainer(model, train_loader, parameters['criterion'], parameters['lr'], parameters['betas'],
+    #                       parameters['epochs'], parameters['batch_size'], parameters['num_classes'],
+    #                       parameters['epsilon'], "trainer", parameters['path'])
+    #     trainer.__train__(train_loader, True)
+
+    # Question 3 - Adversarial example
+    data_loader = DataLoader(dataset=torch_dev_dataset, batch_size=1)
+    adversarial_model = SimpleModel()
+    adversarial_model.load(path=trainer.ckpt)
+    adversarial = Adversarial(adversarial_model, data_loader, parameters['adversarial_epsilons'], parameters['path_plots_adversarial'])
+    adversarial.__attack__()
+    adversarial.__plot_attack__()
+    adversarial.__plot_examples__()
+
+
 # End function
 
 
