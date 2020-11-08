@@ -9,7 +9,6 @@ from torch.utils.data import DataLoader
 import torch
 import torch.optim as optim
 import os
-torch.manual_seed(17)
 
 
 #####################
@@ -49,24 +48,20 @@ class Trainer:
         self.accuracies = []
 
     def __train__(self, save):
-        print("Start Train Model")
         total = 0.0
         correct = 0.0
-        optimizer = optim.Adam(params=self.model.parameters(), lr=self.lr)
+        optimizer = optim.SGD(params=self.model.parameters(), lr=self.lr, momentum=self.betas[0], weight_decay=1e-3)
         self.model.train()
         for epoch in range(self.epochs):
             running_loss = 0.0
             for idx, data in enumerate(self.dataset, 0):
                 running_loss, total, correct = self.__fit_predict__(data, optimizer, running_loss, total, correct)
 
-                if idx % 200 == 199:
+                if idx % 100 == 99:
                     self.__collect_data__(epoch, idx, running_loss, save, total, correct)
                     running_loss = 0.0
                     total = 0.0
                     correct = 0.0
-
-        print("End Train Model")
-        print("==============================================================================")
 
     def __fit_predict__(self, data, optimizer, running_loss, total, correct):
         inputs, labels = data

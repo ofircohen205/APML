@@ -10,4 +10,4 @@
 6. main.py - Given the learning model and dataset, we first wish to evaluate the given model and train it in order to decrease the loss if needed.
 
 
-### Main.py functions:
+### evaluator.py functions:

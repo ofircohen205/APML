@@ -9,7 +9,6 @@ from dataset import *
 from torch.utils.data import DataLoader
 from sklearn.metrics import *
 import torch
-torch.manual_seed(17)
 
 
 #####################
@@ -37,7 +36,6 @@ class Evaluator:
         self.mislabeled = []
 
     def __evaluate__(self):
-        print("Start Evaluate Model")
         class_correct = list(0. for i in range(self.num_classes))
         class_total = list(0. for i in range(self.num_classes))
 
@@ -61,8 +59,7 @@ class Evaluator:
             print("Size of %5s : %2d" % (label, self.counters[label]))
             print('Accuracy of %5s : %2d %%' % (label, 100 * class_correct[idx] / class_total[idx]))
 
-        print("End Evaluate Model")
-        print("==============================================================================")
+        print('Overall Accuracy: %2d %%' % (100 * sum(class_correct) / sum(class_total)))
 
     def __get_mislabeled__(self):
         print("Start get mislabeled images")

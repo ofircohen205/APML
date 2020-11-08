@@ -9,7 +9,7 @@ from trainer import Trainer
 from dataset import *
 from torch.utils.data import DataLoader, WeightedRandomSampler
 from datetime import datetime
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, f1_score
 import torch
 import torch.nn as nn
 import os
@@ -36,19 +36,21 @@ def init():
         'dev_size': torch_dev_dataset.__len__(),
         'num_classes': label_names().__len__(),
         'batch_size': 15,
-        'lr': 0.5 * 1e-3,
+        'lr': 1e-2,
         'betas': (0.9, 0.999),
-        'epochs': 30,
+        'epochs': 20,
         'criterion': nn.CrossEntropyLoss(),
         'adversarial_epsilons': [0, .05, .1, .15, .2, .25, .3],
         'epsilon': 0.15,
-        'lrs': [1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 1e+1, 1e+2, 1e+3, 1e+4, 1e+5],
+        'lrs': [1e-4, 1e-2, 1, 1e+2, 1e+4],
         'path': output_dir,
+        'path_lrs': os.path.join(output_dir, "lrs/"),
         'path_conf_matrix': os.path.join(output_dir, "confusion_matrix/"),
         'path_plots_nn': os.path.join(output_dir, "plots/training_nn/"),
         'path_plots_adversarial': os.path.join(output_dir, "plots/adversarial/"),
         'pretrained_path': './data/pre_trained.ckpt',
-        'fixed_dataset': output_dir + 'fixed_dataset.pickle'
+        'fixed_dataset': output_dir + 'fixed_train_dataset.pickle',
+        'fixed_dataset_dev': output_dir + 'fixed_dev_dataset.pickle'
     }
     return torch_train_dataset, torch_dev_dataset, parameters
 # End function
@@ -56,35 +58,45 @@ def init():
 
 def evaluate(model, data_loader, parameters, counters_dev, name, create_conf_matrix):
     # Evaluate the given model on dev dataset
+    print("Start Evaluate Model")
     evaluator = Evaluator(model, data_loader, parameters['criterion'],
                           counters_dev, parameters['num_classes'], name)
     if create_conf_matrix:
         evaluator.__evaluate__()
         conf_mat = confusion_matrix(evaluator.labels.numpy(), evaluator.predicted.numpy())
+        f_score = f1_score(evaluator.labels.numpy(), evaluator.predicted.numpy(), average='macro')
         labels_names = label_names().values()
         plot_confusion_matrix_sns(conf_mat, "{} confusion matrix".format(evaluator.name),
                                   labels_names, parameters['path_conf_matrix'])
+        print("Model {}. F1-Score: {}".format(evaluator.name, f_score))
     else:
         evaluator.__get_mislabeled__()
+
+    print("End Evaluate Model")
+    print("==============================================================================")
     return evaluator
 # End function
 
 
 def train(model, data_loader, parameters, name, save_best_ckpt):
     # Train the given model and evaluate it
+    print("Start Train Model")
     trainer = Trainer(model, data_loader, parameters['criterion'], parameters['lr'], parameters['betas'],
                       parameters['epochs'], parameters['batch_size'], parameters['num_classes'],
                       parameters['epsilon'], name, parameters['path'])
     trainer.__train__(save_best_ckpt)
     if save_best_ckpt:
-        if len(trainer.model_states) > 0:
-            trainer.model_states = sorted(trainer.model_states, key=lambda x: x['loss'])
-            torch.save({'model_state_dict': trainer.model_states[0]['state_dict']}, trainer.ckpt)
-        else:
-            trainer.model.save(trainer.ckpt)
+        # if len(trainer.model_states) > 0:
+        #     trainer.model_states = sorted(trainer.model_states, key=lambda x: x['loss'])
+        #     torch.save({'model_state_dict': trainer.model_states[0]['state_dict']}, trainer.ckpt)
+        # else:
+        trainer.model.save(trainer.ckpt)
 
     plot(trainer.losses, "{} Loss".format(trainer.name), "loss", "epoch", parameters['path_plots_nn'])
     plot(trainer.accuracies, "{} Accuracy".format(trainer.name), "accuracy", "epoch", parameters['path_plots_nn'])
+    print("End Train Model")
+    print("==============================================================================")
+
     return trainer
 # End function
 
@@ -122,7 +134,7 @@ def inspect_dataset(train_dataset, dev_dataset):
 
     print("Dev dataset:")
     for cls in counters_dev:
-        print("Class {}. size: {}. Percentage: {}".format(cls, counters_dev[cls], (counters_dev[cls] / train_size)))
+        print("Class {}. size: {}. Percentage: {}".format(cls, counters_dev[cls], (counters_dev[cls] / dev_size)))
 
     print("End Inspecting Dataset")
     print("==============================================================================")
@@ -172,6 +184,7 @@ def create_dirs_if_needed():
         os.mkdir('./output/')
     if os.path.exists(output_dir) is not True:
         os.mkdir(output_dir)
+        os.mkdir(output_dir + "lrs/")
         os.mkdir(output_dir + "confusion_matrix/")
         os.mkdir(output_dir + "plots/")
         os.mkdir(output_dir + "plots/training_nn/")
@@ -188,9 +201,11 @@ def fix_dataset(evaluator, dataset, path):
         inputs, labels = dataset.__getitem__(mislabeled[i]['index'])
         actual = mislabeled[i]['labels']
         predicted = mislabeled[i]['predicted']
+        loss = mislabeled[i]['loss']
         if label_names()[actual] == 'car' and label_names()[predicted] == 'cat':
             labels = predicted
             fixed_dataset.append((inputs, labels))
+
         else:
             fixed_dataset.append((inputs, labels))
 
