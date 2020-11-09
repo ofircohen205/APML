@@ -16,8 +16,6 @@ import os
 import matplotlib.pyplot as plt
 import seaborn as sns
 sns.set_theme()
-torch.manual_seed(17)
-
 
 #######################
 ###### FUNCTIONS ######
@@ -38,7 +36,8 @@ def init():
         'batch_size': 15,
         'lr': 1e-2,
         'betas': (0.9, 0.999),
-        'epochs': 20,
+        'first_epochs': 15,
+        'epochs': 25,
         'criterion': nn.CrossEntropyLoss(),
         'adversarial_epsilons': [0, .05, .1, .15, .2, .25, .3],
         'epsilon': 0.15,
@@ -81,8 +80,11 @@ def evaluate(model, data_loader, parameters, counters_dev, name, create_conf_mat
 def train(model, data_loader, parameters, name, save_best_ckpt):
     # Train the given model and evaluate it
     print("Start Train Model")
+    epochs = parameters['epochs']
+    if name == "pre_trained_train":
+        epochs = parameters['first_epochs']
     trainer = Trainer(model, data_loader, parameters['criterion'], parameters['lr'], parameters['betas'],
-                      parameters['epochs'], parameters['batch_size'], parameters['num_classes'],
+                      epochs, parameters['batch_size'], parameters['num_classes'],
                       parameters['epsilon'], name, parameters['path'])
     trainer.__train__(save_best_ckpt)
     if save_best_ckpt:
@@ -201,7 +203,6 @@ def fix_dataset(evaluator, dataset, path):
         inputs, labels = dataset.__getitem__(mislabeled[i]['index'])
         actual = mislabeled[i]['labels']
         predicted = mislabeled[i]['predicted']
-        loss = mislabeled[i]['loss']
         if label_names()[actual] == 'car' and label_names()[predicted] == 'cat':
             labels = predicted
             fixed_dataset.append((inputs, labels))

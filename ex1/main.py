@@ -83,7 +83,9 @@ def main():
     for idx in range(len(parameters['lrs'])):
         models[idx].load(parameters['pretrained_path'])
         model_name = "model_{}".format(idx)
-        trainer = Trainer(models[idx], train_loader, parameters['criterion'], parameters['lrs'][idx],
+        lr = parameters['lrs'][idx]
+        print("model: {}. lr: {}".format(model_name, lr))
+        trainer = Trainer(models[idx], train_loader, parameters['criterion'], lr,
                           parameters['betas'], parameters['epochs'], parameters['batch_size'],
                           parameters['num_classes'], parameters['epsilon'], model_name, parameters['path_lrs'])
         trainer.__train__(False)
