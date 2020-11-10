@@ -1,6 +1,9 @@
 # APML: Exercise 1
 ## Author: Ofir Cohen | ID: 312255847
 
+## How to execute the training life cycle
+
+
 ### Files:
 1. models.py - The learning model
 2. dataset.py - Loads the dataset

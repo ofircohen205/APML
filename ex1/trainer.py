@@ -57,7 +57,7 @@ class Trainer:
             for idx, data in enumerate(self.dataset, 0):
                 running_loss, total, correct = self.__fit_predict__(data, optimizer, running_loss, total, correct)
 
-                if idx % 100 == 99:
+                if idx % 200 == 199:
                     self.__collect_data__(epoch, idx, running_loss, save, total, correct)
                     running_loss = 0.0
                     total = 0.0
