@@ -50,6 +50,7 @@ class Trainer:
     def __train__(self, save):
         total = 0.0
         correct = 0.0
+        # optimizer = optim.Adam(params=self.model.parameters(), weight_decay=1e-3)
         optimizer = optim.SGD(params=self.model.parameters(), lr=self.lr, momentum=self.betas[0], weight_decay=1e-3)
         self.model.train()
         for epoch in range(self.epochs):

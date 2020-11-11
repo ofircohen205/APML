@@ -15,14 +15,14 @@ import torch
 ##################
 ###### MAIN ######
 ##################
-def full_process(torch_train_dataset, torch_dev_dataset, dev_loader, counters_train, counters_dev, parameters):
+def full_process(torch_train_dataset, torch_dev_dataset, train_loader, dev_loader, counters_train, counters_dev, parameters):
     # Load model
     pre_trained = SimpleModel()
     pre_trained.load(path=parameters['pretrained_path'])
 
     # Evaluate given model and train it
-    evaluation(pre_trained, dev_loader, counters_dev, parameters, "pretrain_model", True)
-    trainer = training_loop(pre_trained, dev_loader, parameters, "pretrain_model")
+    evaluation(pre_trained, dev_loader, parameters, counters_dev, "pretrain_model", True)
+    trainer = training_loop(pre_trained, train_loader, parameters, "pretrain_model")
 
     # Load the best state of the model we've trained and evaluate
     trained = SimpleModel()
@@ -32,15 +32,15 @@ def full_process(torch_train_dataset, torch_dev_dataset, dev_loader, counters_tr
     # Model improvements - get mislabeled images and fix them
     print("Improving given model:")
     print("Fix train dataset")
-    torch_train_dataset_fixed = dataset_fix(torch_train_dataset, trainer, parameters, counters_dev, torch_train_dataset, False)
+    torch_train_dataset_fixed = dataset_fix(torch_train_dataset, trainer, parameters, counters_dev, False, "train")
     train_loader = create_data_loader(torch_train_dataset_fixed, counters_train, parameters, True)
     print("==============================================================================")
     print("Fix dev dataset")
-    torch_dev_dataset_fixed = dataset_fix(torch_dev_dataset, trainer, parameters, counters_dev, torch_dev_dataset)
-    dev_loader = create_data_loader(torch_dev_dataset_fixed, counters_train, parameters, True)
+    # torch_dev_dataset_fixed = dataset_fix(torch_dev_dataset, trainer, parameters, counters_dev, False, "dev")
+    # dev_loader = create_data_loader(torch_dev_dataset_fixed, counters_train, parameters, True)
     print("==============================================================================")
 
-    counters_train, counters_dev = inspect_dataset(torch_train_dataset_fixed, torch_dev_dataset_fixed)
+    counters_train, counters_dev = inspect_dataset(torch_train_dataset_fixed, torch_dev_dataset)
 
     # Test given model after fixing datasets
     print("Test given model after fixing datasets")
@@ -54,12 +54,12 @@ def full_process(torch_train_dataset, torch_dev_dataset, dev_loader, counters_tr
     print("End part 1")
     print("==============================================================================")
     playing_with_learning_rate(train_loader, parameters)
-    adversarial_example(torch_train_dataset, torch_dev_dataset, parameters, ckpt)
+    adversarial_example(torch_dev_dataset, parameters, ckpt)
     return ckpt
 # End function
 
 
-def evaluation(model, data_loader, counters, parameters, name, is_evaluating):
+def evaluation(model, data_loader, parameters, counters, name, is_evaluating):
     evaluate(model, data_loader, parameters, counters, name, is_evaluating)
 # End function
 
@@ -69,20 +69,26 @@ def training_loop(model, data_loader, parameters, name):
 # End function
 
 
-def train_and_eval(model, dev_loader, train_loader, counters, parameters, name, is_evaluating):
+def train_and_eval(dev_loader, train_loader, counters, parameters, name, is_evaluating, path):
+    model = SimpleModel()
+    model.load(path)
     evaluate(model, dev_loader, counters, parameters, name, is_evaluating)
-    return train(model, train_loader, parameters)
+    return training_loop(model, train_loader, parameters, name)
 # End function
 
 
-def dataset_fix(dataset, trainer, parameters, counters_dev, torch_train_dataset, is_evaluating):
+def dataset_fix(dataset, trainer, parameters, counters_dev, is_evaluating, name):
     mislabeled_train_loader = DataLoader(dataset=dataset)
     improved_train_model = SimpleModel()
     improved_train_model.load(path=trainer.ckpt)
     evaluator = evaluate(improved_train_model, mislabeled_train_loader, parameters, counters_dev, "improved_model_eval",
                          is_evaluating)
-    fix_dataset(evaluator, torch_train_dataset, './output/train_dataset.pickle')
-    torch_dataset_fixed = get_dataset_as_torch_dataset(path='./output/train_dataset.pickle')
+    if name == "train":
+        output = parameters['fixed_dataset']
+    else:
+        output = parameters['fixed_dataset_dev']
+    fix_dataset(evaluator, dataset, output)
+    torch_dataset_fixed = get_dataset_as_torch_dataset(path=output)
     return torch_dataset_fixed
 # End function
 
@@ -135,10 +141,16 @@ def main():
 
     # If you wish not to executed all training life cycle - you can comment the full_process function
     # and uncomment the wanted function
-    ckpt = full_process(torch_train_dataset, torch_dev_dataset, dev_loader, counters_dev, parameters)
+    ckpt = full_process(torch_train_dataset, torch_dev_dataset, train_loader, dev_loader, counters_train, counters_dev, parameters)
 
-    # evaluation(torch_train_dataset, torch_dev_dataset, parameters, True)
-    # trainer = train_and_eval(torch_train_dataset, torch_dev_dataset, parameters, True)
+    # path = 'YOUR_PATH'
+    # model = SimpleModel()
+    # model.load(path)
+    # evaluation(model, dev_loader, parameters, counters_dev, "eval", True)
+
+    # trainer = train_and_eval(train_loader, dev_loader, counters_dev, parameters, "improved_model", True, path)
+    # ckpt = trainer.ckpt
+
     # playing_with_learning_rate(train_loader, parameters)
     # adversarial_example(torch_dev_dataset, parameters, ckpt)
 

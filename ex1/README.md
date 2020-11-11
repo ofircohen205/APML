@@ -2,6 +2,7 @@
 ## Author: Ofir Cohen | ID: 312255847
 
 ### How to execute the program
+open utils.py and in init function set the 'train_dataset_path' to the path where the dataset is, also for 'dev_dataset_path'
 open bash and execute the command: python main.py
 
 ### Files:

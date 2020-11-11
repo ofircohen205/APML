@@ -25,20 +25,15 @@ def init():
     # Create dir for results
     output_dir = create_dirs_if_needed()
 
-    # Create objects that holds datasets
-    torch_train_dataset = get_dataset_as_torch_dataset(path='./data/train.pickle')
-    torch_dev_dataset = get_dataset_as_torch_dataset(path='./data/dev.pickle')
-
     # Create params dict for learning process
     parameters = {
-        'train_size': torch_train_dataset.__len__(),
-        'dev_size': torch_dev_dataset.__len__(),
+        'train_dataset_path': './data/train.pickle',
+        'dev_dataset_path': './output/fixed_dev.pickle',
         'num_classes': label_names().__len__(),
         'batch_size': 15,
         'lr': 1e-2,
         'betas': (0.9, 0.999),
-        'first_epochs': 15,
-        'epochs': 25,
+        'epochs': 30,
         'criterion': nn.CrossEntropyLoss(),
         'adversarial_epsilons': [0, .05, .1, .15, .2, .25, .3],
         'epsilon': 0.15,
@@ -49,9 +44,16 @@ def init():
         'path_plots_nn': os.path.join(output_dir, "plots/training_nn/"),
         'path_plots_adversarial': os.path.join(output_dir, "plots/adversarial/"),
         'pretrained_path': './data/pre_trained.ckpt',
-        'fixed_dataset': output_dir + 'fixed_train_dataset.pickle',
-        'fixed_dataset_dev': output_dir + 'fixed_dev_dataset.pickle'
+        'fixed_dataset': './output/fixed_train_dataset.pickle',
+        'fixed_dataset_dev': './output/fixed_dev_dataset.pickle'
     }
+
+    # Create objects that holds datasets
+    torch_train_dataset = get_dataset_as_torch_dataset(path=parameters['train_dataset_path'])
+    torch_dev_dataset = get_dataset_as_torch_dataset(path=parameters['dev_dataset_path'])
+    parameters['train_size'] = torch_train_dataset.__len__()
+    parameters['dev_size'] = torch_dev_dataset.__len__()
+
     return torch_train_dataset, torch_dev_dataset, parameters
 # End function
 
@@ -81,11 +83,8 @@ def evaluate(model, data_loader, parameters, counters_dev, name, create_conf_mat
 def train(model, data_loader, parameters, name, save_best_ckpt):
     # Train the given model and evaluate it
     print("Start Train Model")
-    epochs = parameters['epochs']
-    if name == "pre_trained_train":
-        epochs = parameters['first_epochs']
     trainer = Trainer(model, data_loader, parameters['criterion'], parameters['lr'], parameters['betas'],
-                      epochs, parameters['batch_size'], parameters['num_classes'],
+                      parameters['epochs'], parameters['batch_size'], parameters['num_classes'],
                       parameters['epsilon'], name, parameters['path'])
     trainer.__train__(save_best_ckpt)
     if save_best_ckpt:
@@ -207,7 +206,6 @@ def fix_dataset(evaluator, dataset, path):
         if label_names()[actual] == 'car' and label_names()[predicted] == 'cat':
             labels = predicted
             fixed_dataset.append((inputs, labels))
-
         else:
             fixed_dataset.append((inputs, labels))
 
