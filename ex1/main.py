@@ -36,8 +36,8 @@ def full_process(torch_train_dataset, torch_dev_dataset, train_loader, dev_loade
     train_loader = create_data_loader(torch_train_dataset_fixed, counters_train, parameters, True)
     print("==============================================================================")
     print("Fix dev dataset")
-    # torch_dev_dataset_fixed = dataset_fix(torch_dev_dataset, trainer, parameters, counters_dev, False, "dev")
-    # dev_loader = create_data_loader(torch_dev_dataset_fixed, counters_train, parameters, True)
+    torch_dev_dataset_fixed = dataset_fix(torch_dev_dataset, trainer, parameters, counters_dev, False, "dev")
+    dev_loader = create_data_loader(torch_dev_dataset_fixed, counters_train, parameters, True)
     print("==============================================================================")
 
     counters_train, counters_dev = inspect_dataset(torch_train_dataset_fixed, torch_dev_dataset)
@@ -147,10 +147,10 @@ def main():
     # model = SimpleModel()
     # model.load(path)
     # evaluation(model, dev_loader, parameters, counters_dev, "eval", True)
-
+    #
     # trainer = train_and_eval(train_loader, dev_loader, counters_dev, parameters, "improved_model", True, path)
     # ckpt = trainer.ckpt
-
+    #
     # playing_with_learning_rate(train_loader, parameters)
     # adversarial_example(torch_dev_dataset, parameters, ckpt)
 
