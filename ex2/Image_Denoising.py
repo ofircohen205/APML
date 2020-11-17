@@ -270,12 +270,13 @@ def MVN_log_likelihood(X, model):
     def calculate_log_likelihood(residual):
         return -0.5 * (np.log(np.linalg.det(model.cov))
                        + residual.T.dot(np.linalg.inv(model.cov)).dot(residual)
-                       + 2 * np.log(2 * np.pi))
+                       + X.shape[1] * np.log(2 * np.pi))
 
     residuals = X - model.mean
     loglikelihood = np.apply_along_axis(calculate_log_likelihood, 1, residuals)
     loglikelihood.sum()
     return loglikelihood
+    # return multivariate_normal(mean=model.mean, cov=model.cov).logpdf(X)
 
 
 def GSM_log_likelihood(X, model):
@@ -290,12 +291,14 @@ def GSM_log_likelihood(X, model):
     def calculate_log_likelihood(residual):
         return -0.5 * (np.log(np.linalg.det(model.cov))
                        + residual.T.dot(np.linalg.inv(model.cov)).dot(residual)
-                       + 2 * np.log(2 * np.pi))
+                       + X.shape[1] * np.log(2 * np.pi))
 
-    residuals = X - 0
+    residuals = X
     loglikelihood = np.apply_along_axis(calculate_log_likelihood, 1, residuals)
     loglikelihood.sum()
     return loglikelihood
+    # cov = model.mix ** 2 * model.cov
+    # return multivariate_normal(mean=np.zeros(cov.shape[0]), cov=cov).logpdf(X)
 
 
 
@@ -308,15 +311,8 @@ def ICA_log_likelihood(X, model):
     :param model: An ICA_Model object.
     :return: The log likelihood of all the patches combined.
     """
-    def calculate_log_likelihood(residual):
-        return -0.5 * (np.log(np.linalg.det(model.cov))
-                       + residual.T.dot(np.linalg.inv(model.cov)).dot(residual)
-                       + 2 * np.log(2 * np.pi))
 
-    residuals = X - model.mean
-    loglikelihood = np.apply_along_axis(calculate_log_likelihood, 1, residuals)
-    loglikelihood.sum()
-    return loglikelihood
+    # TODO: YOUR CODE HERE
 
 
 def learn_MVN(X):
@@ -409,6 +405,29 @@ def ICA_Denoise(Y, ica_model, noise_std):
     # TODO: YOUR CODE HERE
 
 
+def load_dataset(path):
+    with open(path, 'rb') as f:
+        dataset = pickle.load(f)
+
+    return dataset
+
+
 if __name__ == '__main__':
-    images_example()
-    # TODO: YOUR CODE HERE
+    psize = (8, 8)
+    train_dataset = load_dataset('./train_images.pickle')
+    test_dataset = load_dataset('./test_images.pickle')
+
+    train_patches = sample_patches(train_dataset, psize)
+    test_patches = sample_patches(test_dataset, psize)
+
+    cropped_train_patches = crop_image(grayscale_and_standardize(train_dataset)[0])[:8, :8]
+    mvn = multivariate_normal(np.random.rand(8))
+    mvn_model = MVN_Model(mvn.mean, mvn.cov)
+    mvn_log_likelihood = MVN_log_likelihood(cropped_train_patches, mvn_model)
+    print(mvn_log_likelihood)
+
+    gsm_cov = np.zeros_like(mvn_model.cov)
+    np.fill_diagonal(gsm_cov, 1)
+    gsm_model = GSM_Model(gsm_cov, np.random.rand(8))
+    gsm_log_likelihood = GSM_log_likelihood(cropped_train_patches, gsm_model)
+    print(gsm_log_likelihood)
