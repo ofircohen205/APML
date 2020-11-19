@@ -267,16 +267,12 @@ def MVN_log_likelihood(X, model):
     :param model: A MVN_Model object.
     :return: The log likelihood of all the patches combined.
     """
-    def calculate_log_likelihood(residual):
-        return -0.5 * (np.log(np.linalg.det(model.cov))
-                       + residual.T.dot(np.linalg.inv(model.cov)).dot(residual)
-                       + X.shape[1] * np.log(2 * np.pi))
-
-    residuals = X - model.mean
-    loglikelihood = np.apply_along_axis(calculate_log_likelihood, 1, residuals)
-    loglikelihood.sum()
-    return loglikelihood
-    # return multivariate_normal(mean=model.mean, cov=model.cov).logpdf(X)
+    residuals = calc_residuals(X, model)
+    log_2pi = X.shape[1] * np.log(2 * np.pi)
+    log_sigma = np.log(np.linalg.det(model.cov))
+    mahalanobis = -0.5 * np.sum(residuals.T.dot(np.linalg.inv(model.cov)).dot(residuals))
+    return log_2pi + log_sigma + mahalanobis
+    # return multivariate_normal(X, mean=model.mean, cov=model.cov).logpdf(X)
 
 
 def GSM_log_likelihood(X, model):
@@ -288,18 +284,8 @@ def GSM_log_likelihood(X, model):
     :param model: A GSM_Model object.
     :return: The log likelihood of all the patches combined.
     """
-    def calculate_log_likelihood(residual):
-        return -0.5 * (np.log(np.linalg.det(model.cov))
-                       + residual.T.dot(np.linalg.inv(model.cov)).dot(residual)
-                       + X.shape[1] * np.log(2 * np.pi))
-
-    residuals = X
-    loglikelihood = np.apply_along_axis(calculate_log_likelihood, 1, residuals)
-    loglikelihood.sum()
-    return loglikelihood
-    # cov = model.mix ** 2 * model.cov
-    # return multivariate_normal(mean=np.zeros(cov.shape[0]), cov=cov).logpdf(X)
-
+    mvn_model = MVN_Model(np.zeros(X.shape[0]), (model.mix ** 2) * model.cov)
+    return MVN_log_likelihood(X, mvn_model)
 
 
 def ICA_log_likelihood(X, model):
@@ -321,8 +307,22 @@ def learn_MVN(X):
     :param X: a DxM data matrix, where D is the dimension, and M is the number of samples.
     :return: A trained MVN_Model object.
     """
+    pi = np.ones(number_of_k) / number_of_k
+    ciy = np.asmatrix(np.empty_like(X))
+    mvn = MVN_Model(np.mean(X, axis=1), np.cov(X))
+    previous_ll, ll = 0, 1
+    tol = 1e-4
+    lls = []
+    while ll - previous_ll > tol:   # EM Algorithm
+        previous_ll = MVN_log_likelihood(X, mvn)
+        lls.append(previous_ll)
+        mean, cov, c_iy, pi = fit(X, mvn.mean, mvn.cov, ciy, pi)
+        mvn = MVN_Model(mean, cov)
+        ll = MVN_log_likelihood(X, mvn)
+        lls.append(ll)
+        print(lls)
 
-    # TODO: YOUR CODE HERE
+    return mvn_model
 
 
 def learn_GSM(X, k):
@@ -336,8 +336,7 @@ def learn_GSM(X, k):
     :param k: The number of components of the GSM model.
     :return: A trained GSM_Model object.
     """
-
-    # TODO: YOUR CODE HERE
+    return GSM_Model(np.cov(X), np.random.rand(k))
 
 
 def learn_ICA(X, k):
@@ -405,11 +404,44 @@ def ICA_Denoise(Y, ica_model, noise_std):
     # TODO: YOUR CODE HERE
 
 
+def fit(X, mean, cov, c_iy, pi):
+    # E-Step
+    for i in range(X.shape[0]):
+        den = 0
+        for j in range(number_of_k):
+            num = multivariate_normal.pdf(X[i, :], mean[j], cov[j, :]) * pi[j]
+            den += num
+            c_iy[i, j] = num
+        c_iy[i, :] /= den
+
+    # M-Step
+    for j in range(number_of_k):
+        const = c_iy[:, j].sum()
+        pi[j] = 1/X.shape[0] * const
+        mean_j = np.zeros(X.shape)
+        cov_j = np.zeros(cov.shape)
+        for i in range(X.shape[0]):
+            mean_j += (X[i, :] * c_iy[i, j])
+            cov_j += c_iy[i, j] * ((X[i, :] - mean[j]).T * (X[i, :] - mean[j]))
+        mean[j] = mean_j / const
+        cov[j] = cov_j / const
+
+    return mean, cov, c_iy, pi
+
+
+
 def load_dataset(path):
     with open(path, 'rb') as f:
         dataset = pickle.load(f)
 
     return dataset
+
+
+def calc_residuals(X, model):
+    residuals = X.copy()
+    for idx in range(X.shape[0]):
+        residuals[idx] -= model.mean[idx]
+    return residuals
 
 
 if __name__ == '__main__':
@@ -419,15 +451,14 @@ if __name__ == '__main__':
 
     train_patches = sample_patches(train_dataset, psize)
     test_patches = sample_patches(test_dataset, psize)
+    number_of_k = len(train_patches)
 
-    cropped_train_patches = crop_image(grayscale_and_standardize(train_dataset)[0])[:8, :8]
-    mvn = multivariate_normal(np.random.rand(8))
-    mvn_model = MVN_Model(mvn.mean, mvn.cov)
-    mvn_log_likelihood = MVN_log_likelihood(cropped_train_patches, mvn_model)
+    mvn_model = MVN_Model(np.mean(train_patches, axis=1), np.cov(train_patches))
+    mvn_log_likelihood = MVN_log_likelihood(train_patches, mvn_model)
     print(mvn_log_likelihood)
-
-    gsm_cov = np.zeros_like(mvn_model.cov)
-    np.fill_diagonal(gsm_cov, 1)
-    gsm_model = GSM_Model(gsm_cov, np.random.rand(8))
-    gsm_log_likelihood = GSM_log_likelihood(cropped_train_patches, gsm_model)
-    print(gsm_log_likelihood)
+    learn_MVN(train_patches)
+    # gsm_cov = np.zeros_like(mvn_model.cov)
+    # np.fill_diagonal(gsm_cov, 1)
+    # gsm_model = GSM_Model(gsm_cov, np.random.rand(number_of_k))
+    # gsm_log_likelihood = GSM_log_likelihood(train_patches, gsm_model)
+    # print(gsm_log_likelihood)
