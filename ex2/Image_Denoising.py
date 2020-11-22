@@ -338,7 +338,7 @@ def learn_GSM(X, k):
     :return: A trained GSM_Model object.
     """
     cov = np.array([np.cov(X) for _ in range(k)])
-    mix = np.random.dirichlet(np.ones(k))
+    mix = np.ones(k) / k
     gsm_model = GSM_Model(cov, mix)
     return fit(X, gsm_model)
 
@@ -438,6 +438,7 @@ def fit(X, model):
         if iter == 0:
             print("Initial GSM Log likelihood: {}".format(previous_ll))
         model = EM(X, model)
+        print(model.cov)
         iter += 1
         ll = GSM_log_likelihood(X, model)
         lls.append(ll)

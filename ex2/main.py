@@ -14,34 +14,30 @@ def mvn(train_dataset, test_dataset, X_train, X_test, time):
     print("Test MVN Log Likelihood: {}".format(mvn_test_log_likelihood))
     print("-------------------------------------------------")
     save_model(mvn_model, './output/mvn/mvn_model_{}.pkl'.format(time))
-    for idx, image in enumerate(grayscale_and_standardize(train_dataset), 0):
-        print("Start with image: {}".format(idx+1))
-        test_denoising(image, mvn_model, MVN_Denoise)
-        print("-------------------------------------------------")
-    for idx, image in enumerate(grayscale_and_standardize(test_dataset), 0):
-        print("Start with image: {}".format(idx+1))
-        test_denoising(image, mvn_model, MVN_Denoise)
-        print("-------------------------------------------------")
+    test_denoise(mvn_model, train_dataset, MVN_Denoise)
+    test_denoise(mvn_model, test_dataset, MVN_Denoise)
 # End function
 
 
 def gsm(train_dataset, test_dataset, X_train, X_test, time):
-    k_mixtures = 10
+    k_mixtures = 5
     gsm_model = learn_GSM(X_train, k_mixtures)
     gsm_train_log_likelihood = GSM_log_likelihood(X_train, gsm_model)
     gsm_test_log_likelihood = GSM_log_likelihood(X_test, gsm_model)
     print("Train MVN Log Likelihood: {}".format(gsm_train_log_likelihood))
     print("Test MVN Log Likelihood: {}".format(gsm_test_log_likelihood))
     print("-------------------------------------------------")
-    # save_model(gsm_model, './output/gsm/gsm_model_{}.pkl'.format(time))
-    # for idx, image in enumerate(grayscale_and_standardize(train_dataset), 0):
-    #     print("Start with image: {}".format(idx + 1))
-    #     test_denoising(image, gsm_model, GSM_Denoise)
-    #     print("-------------------------------------------------")
-    # for idx, image in enumerate(grayscale_and_standardize(test_dataset), 0):
-    #     print("Start with image: {}".format(idx + 1))
-    #     test_denoising(image, gsm_model, GSM_Denoise)
-    #     print("-------------------------------------------------")
+    save_model(gsm_model, './output/gsm/gsm_model_{}.pkl'.format(time))
+    test_denoise(gsm_model, train_dataset, GSM_Denoise)
+    test_denoise(gsm_model, test_dataset, GSM_Denoise)
+# End function
+
+
+def test_denoise(model, dataset, denoise_func):
+    for idx, image in enumerate(grayscale_and_standardize(dataset), 0):
+        print("Start with image: {}".format(idx+1))
+        test_denoising(image, model, denoise_func)
+        print("-------------------------------------------------")
 # End function
 
 
