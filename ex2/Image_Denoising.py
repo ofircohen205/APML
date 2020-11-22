@@ -297,8 +297,8 @@ def GSM_log_likelihood(X, model):
         tmp = 0
         for j in range(k):
             mvn = multivariate_normal(cov=model.cov[j, :])
-            tmp += mvn.pdf(X[:, i]) * model.mix[j]
-        ll += np.log(tmp)
+            tmp += mvn.logpdf(X[:, i]) * model.mix[j]
+        ll += tmp
     return ll
 
 
@@ -337,9 +337,8 @@ def learn_GSM(X, k):
     :param k: The number of components of the GSM model.
     :return: A trained GSM_Model object.
     """
-    D, M = X.shape
-    cov = np.array([np.asmatrix(np.identity(D)) for _ in range(k)])
-    mix = np.ones(k) / k
+    cov = np.array([np.cov(X) for _ in range(k)])
+    mix = np.random.dirichlet(np.ones(k))
     gsm_model = GSM_Model(cov, mix)
     return fit(X, gsm_model)
 
@@ -394,8 +393,21 @@ def GSM_Denoise(Y, gsm_model, noise_std):
     :return: a DxM matrix of denoised image patches.
 
     """
-
-    # TODO: YOUR CODE HERE
+    X = np.empty(Y.shape)
+    k = gsm_model.mix.shape[0]
+    for i in range(k):
+        upper_arg = gsm_model.mix[i] * (multivariate_normal(cov=(gsm_model.cov[i] + noise_std**2 * np.identity(gsm_model.cov[i].shape[0]))).pdf(Y))
+        lower_arg = 0
+        for j in range(k):
+            lower_arg += gsm_model.mix[j] * (multivariate_normal(cov=(gsm_model.cov[j] + noise_std**2 * np.identity(gsm_model.cov[j].shape[0]))).pdf(Y))
+        c_i = upper_arg / lower_arg
+        cov_inv = np.linalg.inv(gsm_model.cov[i])
+        eye_noise_std = np.eye(cov_inv.shape[0]) / (noise_std ** 2)
+        left_arg = np.linalg.inv(cov_inv + eye_noise_std)
+        right_arg = calc_residuals((Y / (noise_std ** 2)), cov_inv, "plus")
+        weiner_i = np.dot(left_arg, right_arg)
+        X += c_i * weiner_i
+    return X
 
 
 def ICA_Denoise(Y, ica_model, noise_std):
@@ -429,8 +441,8 @@ def fit(X, model):
         iter += 1
         ll = GSM_log_likelihood(X, model)
         lls.append(ll)
-        current_time = current_time()
-        save_model(model, './output/gsm/gsm_model_{}.pkl'.format(current_time))
+        curr_time = current_time()
+        save_model(model, './output/gsm/gsm_model_{}.pkl'.format(curr_time))
         print("Iteration: {}. GSM Log likelihood: {}".format(iter, ll))
     print("Terminate at: {} iteration. GSM Log likelihood: {}".format(iter, ll))
     plot(lls, './output/gsm/plots')
@@ -442,27 +454,79 @@ def EM(X, model):
     cov = model.cov
     pi = model.mix
     k = pi.shape[0]
-    c_iy =np.zeros((M, k), dtype=float)
     # E-Step
+    c = E_Step(X, model, pi, M, k)
+
+    # M-Step
+    M_Step(X, c, pi, cov, D, M, k)
+    return GSM_Model(cov, pi)
+
+
+def E_Step(X, model, pi, M, k):
+    print("Start E-Step")
+    c = np.zeros((M, k), dtype=float)
     for i in range(M):
         den = 0
         for j in range(k):
             mvn = multivariate_normal(cov=model.cov[j, :])
-            num = mvn.pdf(X[:, i]) * pi[j]
+            num = mvn.logpdf(X[:, i]) * pi[j]
             den += num
-            c_iy[i, j] = num
-        c_iy[i, :] /= den
+            c[i, j] = num
+        c[i, :] /= den
+    print("End E-Step")
+    return c
+# End function
 
-    # M-Step
+
+def M_Step(X, c, pi, cov, D, M, k):
+    print("Start M-Step")
     for j in range(k):
-        const = c_iy[:, j].sum()
-        pi[j] = 1 / X.shape[0] * const
+        const = c[:, j].sum()
+        pi[j] = (1 / M) * const
         cov_j = np.zeros((D, D))
+        upper_r_j = 0
         for i in range(M):
-            cov_j += c_iy[i, j] * (X[:, i].T * X[:, i])
-        cov[j] = cov_j / const
+            upper_r_j += (c[i, j] * (np.dot(np.dot(X[:, i].T, np.linalg.inv(cov[j, :])), X[:, i])))
+            cov_j += c[i, j] * (X[:, i].T * X[:, i])
+        r_j = upper_r_j / (D * const)
+        if r_j < 1:
+            r_j = np.random.randint(1, D)
+        cov[j] = (r_j ** 2) * (cov_j / const)
+    print("End M-Step")
+# End function
 
-    return GSM_Model(cov, pi)
+
+def _getAplus(A):
+    eigval, eigvec = np.linalg.eig(A)
+    Q = np.asmatrix(eigvec)
+    xdiag = np.asmatrix(np.diag(np.maximum(eigval, 0)))
+    return Q*xdiag*Q.T
+
+
+def _getPs(A, W=None):
+    W05 = np.asmatrix(W**.5)
+    return  W05.I * _getAplus(W05 * A * W05) * W05.I
+
+
+def _getPu(A, W=None):
+    Aret = np.array(A.copy())
+    Aret[W > 0] = np.array(W)[W > 0]
+    return np.asmatrix(Aret)
+
+
+def nearPD(A, nit=10):
+    n = A.shape[0]
+    W = np.identity(n)
+# W is the matrix used for the norm (assumed to be Identity matrix here)
+# the algorithm should work for any diagonal W
+    deltaS = 0
+    Yk = A.copy()
+    for k in range(nit):
+        Rk = Yk - deltaS
+        Xk = _getPs(Rk, W=W)
+        deltaS = Xk - Rk
+        Yk = _getPu(Xk, W=W)
+    return Yk
 
 
 if __name__ == '__main__':

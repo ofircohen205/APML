@@ -38,6 +38,10 @@ def gsm(train_dataset, test_dataset, X_train, X_test, time):
     #     print("Start with image: {}".format(idx + 1))
     #     test_denoising(image, gsm_model, GSM_Denoise)
     #     print("-------------------------------------------------")
+    # for idx, image in enumerate(grayscale_and_standardize(test_dataset), 0):
+    #     print("Start with image: {}".format(idx + 1))
+    #     test_denoising(image, gsm_model, GSM_Denoise)
+    #     print("-------------------------------------------------")
 # End function
 
 
