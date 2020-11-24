@@ -20,7 +20,7 @@ def mvn(train_dataset, test_dataset, X_train, X_test, time):
 
 
 def gsm(train_dataset, test_dataset, X_train, X_test, time):
-    k_mixtures = 5
+    k_mixtures = 10
     gsm_model = learn_GSM(X_train, k_mixtures)
     gsm_train_log_likelihood = GSM_log_likelihood(X_train, gsm_model)
     gsm_test_log_likelihood = GSM_log_likelihood(X_test, gsm_model)
@@ -28,8 +28,8 @@ def gsm(train_dataset, test_dataset, X_train, X_test, time):
     print("Test MVN Log Likelihood: {}".format(gsm_test_log_likelihood))
     print("-------------------------------------------------")
     save_model(gsm_model, './output/gsm/gsm_model_{}.pkl'.format(time))
-    test_denoise(gsm_model, train_dataset, GSM_Denoise)
-    test_denoise(gsm_model, test_dataset, GSM_Denoise)
+    # test_denoise(gsm_model, train_dataset, GSM_Denoise)
+    # test_denoise(gsm_model, test_dataset, GSM_Denoise)
 # End function
 
 

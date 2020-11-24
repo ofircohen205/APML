@@ -1,12 +1,21 @@
+import time
+
 import numpy as np
 import numpy.matlib
 import matplotlib.pyplot as plt
 from scipy.stats import multivariate_normal
 from scipy.special import logsumexp
-# from scipy.misc import logsumexp
 import pickle
 from skimage.util import view_as_windows as viewW
-from utils import *
+
+def print_red(skk): print("\033[91m {}\033[00m" .format(skk))
+def print_green(skk): print("\033[92m {}\033[00m" .format(skk))
+def print_yellow(skk): print("\033[93m {}\033[00m" .format(skk))
+def print_light_purple(skk): print("\033[94m {}\033[00m" .format(skk))
+def print_purple(skk): print("\033[95m {}\033[00m" .format(skk))
+def print_cyan(skk): print("\033[96m {}\033[00m" .format(skk))
+def pr_light_gray(skk): print("\033[97m {}\033[00m" .format(skk))
+def print_black(skk): print("\033[98m {}\033[00m" .format(skk))
 
 
 def images_example(path='train_images.pickle'):
@@ -27,7 +36,7 @@ def images_example(path='train_images.pickle'):
 
     plt.figure()
     for i in range(4):
-        plt.subplot(2, 2, i + 1)
+        plt.subplot(2, 2, i+1)
         plt.imshow(patches[:, i].reshape(patch_size), cmap='gray')
         plt.title("Patch Example")
     plt.show()
@@ -43,7 +52,7 @@ def im2col(A, window, stepsize=1):
     :return: A (heightXwidth)x(NxM) matrix of image patches.
     """
     return viewW(np.ascontiguousarray(A), (window[0], window[1])).reshape(-1,
-                                                                          window[0] * window[1]).T[:, ::stepsize]
+                        window[0] * window[1]).T[:, ::stepsize]
 
 
 def grayscale_and_standardize(images, remove_mean=True):
@@ -70,9 +79,8 @@ def grayscale_and_standardize(images, remove_mean=True):
 
     if remove_mean:
         for image in standard_images:
-            image -= np.tile([dataset_mean_pixel], image.shape)
-            # image -= np.matlib.repmat([dataset_mean_pixel], image.shape[0],
-            #                           image.shape[1])
+            image -= np.matlib.repmat([dataset_mean_pixel], image.shape[0],
+                                      image.shape[1])
 
     return standard_images
 
@@ -165,8 +173,7 @@ def normalize_log_likelihoods(X):
     :return: The matrix after normalization.
     """
     h, w = np.shape(X)
-    return X - np.tile(logsumexp(X, axis=0), (h, 1))
-    # return X - np.matlib.repmat(logsumexp(X, axis=0), h, 1)
+    return X - np.matlib.repmat(logsumexp(X, axis=0), h, 1)
 
 
 def test_denoising(image, model, denoise_function,
@@ -190,7 +197,7 @@ def test_denoising(image, model, denoise_function,
     # make the image noisy:
     for i in range(len(noise_range)):
         noisy_images[:, :, i] = image + (
-                noise_range[i] * np.random.randn(h, w))
+        noise_range[i] * np.random.randn(h, w))
 
     # denoise the image:
     for i in range(len(noise_range)):
@@ -223,11 +230,9 @@ class MVN_Model:
     mean - a D sized vector with the mean of the gaussian.
     cov - a D-by-D matrix with the covariance matrix.
     """
-
     def __init__(self, mean, cov):
         self.mean = mean
         self.cov = cov
-
 
 class GSM_Model:
     """
@@ -238,11 +243,9 @@ class GSM_Model:
         covariance matrices should be scaled versions of each other.
     mix - k-length probability vector for the mixture of the gaussians.
     """
-
     def __init__(self, cov, mix):
         self.cov = cov
         self.mix = mix
-
 
 class ICA_Model:
     """
@@ -255,32 +258,29 @@ class ICA_Model:
     mix - DxK matrix whose (d,k) element corresponds to the weight of the k'th
         gaussian in d'th source.
     """
-
     def __init__(self, P, vars, mix):
         self.P = P
         self.vars = vars
         self.mix = mix
 
 
-@benchmark
 def MVN_log_likelihood(X, model):
     """
     Given image patches and a MVN model, return the log likelihood of the patches
     according to the model.
 
-    :param X: a patch_sizeXnumber_of_patches matrix of image patches.
+    :param X: a patch_sizeX number_of_patches matrix of image patches.
     :param model: A MVN_Model object.
     :return: The log likelihood of all the patches combined.
     """
-    D, M = X.shape
-    log_2pi = D * np.log(2 * np.pi)
-    log_det = np.log(np.linalg.det(model.cov))
-    residuals = calc_residuals(X, model.mean, "minus")
-    mahalanobis_distance = np.dot(np.dot(residuals.T, np.linalg.inv(model.cov)), residuals)
-    return -0.5 * (log_2pi + log_det + mahalanobis_distance).sum()
+    start = time.time()
+    x_log = normalize_log_likelihoods(X.copy())
+    ll = multivariate_normal.logpdf(x_log.T, model.mean, model.cov).sum()
+    end = time.time()
+    print_cyan(f'MVN_log_likelihood() ran for:{ end - start } seconds')
+    return ll
 
 
-@benchmark
 def GSM_log_likelihood(X, model):
     """
     Given image patches and a GSM model, return the log likelihood of the patches
@@ -290,16 +290,19 @@ def GSM_log_likelihood(X, model):
     :param model: A GSM_Model object.
     :return: The log likelihood of all the patches combined.
     """
-    D, M = X.shape
-    k = model.mix.shape[0]
-    log_likelihood = 0
-    for i in range(M):
-        logpdf_X = 0
-        for j in range(k):
-            mvn = multivariate_normal(cov=model.cov[j, :])
-            logpdf_X = mvn.logpdf(x=X[:, i]) * model.mix[j]
-        log_likelihood += logpdf_X
-    return log_likelihood
+    print_green('--- GSM_log_likelihood() executed ---')
+    m, n = X.shape
+    ll = 0
+    start = time.time()
+    for i in range(n):
+        tmp = 0
+        for j in range(model.mix.shape[0]):
+            tmp += multivariate_normal.logpdf(x=X[:, i], cov=model.cov[j, :]) * model.mix[j]
+        ll += tmp
+    end = time.time()
+    print_cyan(f'GSM_log_likelihood() ran for:{ end - start } seconds')
+    print_green('--- GSM_log_likelihood() done ---')
+    return ll
 
 
 def ICA_log_likelihood(X, model):
@@ -315,17 +318,18 @@ def ICA_log_likelihood(X, model):
     # TODO: YOUR CODE HERE
 
 
-@benchmark
 def learn_MVN(X):
     """
     Learn a multivariate normal model, given a matrix of image patches.
     :param X: a DxM data matrix, where D is the dimension, and M is the number of samples.
     :return: A trained MVN_Model object.
     """
-    return MVN_Model(np.mean(X, axis=-1), np.cov(X))
+    print_green('--- learn_MVN() executed ---')
+    mvn = MVN_Model(np.mean(X, axis=1), np.cov(X))
+    print_green('--- learn_MVN() done ---')
+    return mvn
 
 
-@benchmark
 def learn_GSM(X, k):
     """
     Learn parameters for a Gaussian Scaling Mixture model for X using EM.
@@ -337,11 +341,29 @@ def learn_GSM(X, k):
     :param k: The number of components of the GSM model.
     :return: A trained GSM_Model object.
     """
-    cov = np.array([(np.cov(X) + (1e-6 * np.identity(X.shape[0]))) for _ in range(k)])
-    mix = np.random.random(k)
-    mix /= np.sum(mix)  # create random pi_ys
-    gsm_model = GSM_Model(cov, mix)
-    return fit(X, gsm_model)
+    print_green('--- learn_GSM() executed ---')
+    m, n = X.shape
+    cov = np.array([np.cov(X) for i in range(k)])
+    _rYs = np.ones(k)
+    phi = np.ones(k) / k
+    model = GSM_Model(cov, phi)
+
+    num_iterations = 0
+    ll = 1
+    previous_ll = 0
+    tol = 1e-2
+    w = np.asmatrix(np.empty((m, k), dtype=float))
+    while abs(ll - previous_ll) > tol:
+        previous_ll = GSM_log_likelihood(X, model)
+        fit_GSM(model, X, w, k, _rYs)
+        num_iterations += 1
+        ll = GSM_log_likelihood(X, model)
+        print_purple('Iteration %d: log-likelihood is %.6f' % (num_iterations, ll))
+        print_light_purple(f'current log likelihood - previous likelihood = {ll - previous_ll}')
+        save_model(model=model)
+    print_yellow('Terminate at %d-th iteration:log-likelihood is %.6f' % (num_iterations, ll))
+    print_green('--- learn_GSM() done ---')
+    return model
 
 
 def learn_ICA(X, k):
@@ -360,7 +382,6 @@ def learn_ICA(X, k):
     # TODO: YOUR CODE HERE
 
 
-@benchmark
 def MVN_Denoise(Y, mvn_model, noise_std):
     """
     Denoise every column in Y, assuming an MVN model and gaussian white noise.
@@ -373,7 +394,18 @@ def MVN_Denoise(Y, mvn_model, noise_std):
     :param noise_std: The standard deviation of the noise.
     :return: a DxM matrix of denoised image patches.
     """
-    return calc_weiner_filter(Y, mvn_model.mean, mvn_model.cov, noise_std)
+    # print(mvn_model.mean.shape)
+    print_green('--- MVN_Denoise() executed ---')
+    arg_1 = np.linalg.inv(np.linalg.inv(mvn_model.cov) + (1/noise_std**2) * np.identity(mvn_model.cov.shape[0]))
+
+    arg_2_1 = np.dot(np.linalg.inv(mvn_model.cov), mvn_model.mean)
+    arg_2 = (1/noise_std**2) * Y
+
+    for i in range(arg_2.shape[0]):
+        arg_2[i] += arg_2_1[i]
+
+    print_green('--- MVN_Denoise() done ---')
+    return np.dot(arg_1, arg_2)
 
 
 def GSM_Denoise(Y, gsm_model, noise_std):
@@ -389,17 +421,8 @@ def GSM_Denoise(Y, gsm_model, noise_std):
     :return: a DxM matrix of denoised image patches.
 
     """
-    X = np.empty(Y.shape)
-    k = gsm_model.mix.shape[0]
-    for i in range(k):
-        upper_arg = gsm_model.mix[i] * (multivariate_normal(cov=(gsm_model.cov[i] + noise_std**2 * np.identity(gsm_model.cov[i].shape[0]))).logpdf(Y))
-        lower_arg = 0
-        for j in range(k):
-            lower_arg += gsm_model.mix[j] * (multivariate_normal(cov=(gsm_model.cov[j] + noise_std**2 * np.identity(gsm_model.cov[j].shape[0]))).logpdf(Y))
-        c_i = upper_arg / lower_arg
-        weiner_i = calc_weiner_filter(Y, np.zeros(Y.shape[1]), gsm_model.cov[i, :], noise_std)
-        X += c_i * weiner_i
-    return X
+
+    # TODO: YOUR CODE HERE
 
 
 def ICA_Denoise(Y, ica_model, noise_std):
@@ -417,89 +440,80 @@ def ICA_Denoise(Y, ica_model, noise_std):
 
     # TODO: YOUR CODE HERE
 
+def load_data(path):
+    with open(path, 'rb') as f:
+        dataset = pickle.load(f)
+    return dataset
 
-def fit(X, model):
-    D, M = X.shape
-    k = model.mix.shape[0]
-    lls = []
-    ll = 1
-    previous_ll = 0
-    tol = 1e-2
-    iter = 0
-    cs = np.asmatrix(np.zeros((M, k), dtype=float))
-    while np.abs(ll - previous_ll) > tol or iter <= 10:
-        if iter == 0:
-            previous_ll = np.abs(GSM_log_likelihood(X, model))
-            print("Initial GSM Log likelihood: {}".format(previous_ll))
-        lls.append(previous_ll)
-        EM(X, model, cs)
-        iter += 1
-        ll = np.abs(GSM_log_likelihood(X, model))
-        lls.append(ll)
-        curr_time = current_time()
-        save_model(model, './output/gsm/gsm_model_{}.pkl'.format(curr_time))
-        print("EM Iteration no.: {}. GSM Log likelihood: {}".format(iter, ll))
-    print("EM Done in iteration no.: {}. GSM Log likelihood: {}".format(iter, ll))
-    plot(lls, './output/gsm/plots')
-    return model
+def do_mvn_stuff(train_data, train_samples, test_data, test_samples):
+    mvn_model = learn_MVN(train_samples)
+    ll = MVN_log_likelihood(train_samples, mvn_model)
+    for img in grayscale_and_standardize(train_data):
+        test_denoising(img, mvn_model, MVN_Denoise)
+    print(f'Mvn log likelihood estimation: {ll}')
 
 
-def EM(X, model, cs):
-    # Initialization
-    # E-Step
-    E_Step(X, model, cs)
-    # M-Step
-    M_Step(X, model, cs)
-# End function
+def do_gsm_stuff(train_data, train_samples, test_data, test_samples):
+    gsm_model = learn_GSM(train_samples, 10)
 
+def fit_GSM(gsm_model, X, w, k, _rYs):
+    """
+    Implementation for EM algorithm.
 
-def E_Step(X, model, cs):
-    print("Start E-Step")
-    _, M = X.shape
-    k = model.mix.shape[0]
-    for i in range(M):
-        density = 0
+    :param gsm_model: pre-trained GSM model.
+    :param X: The data object.
+    :param w: ciy -> the probability for Xi sample to be drawn from gaussian Yi.
+    :param k: number of gaussian's.
+    :param _rYs the scalars we are train for each model
+    """
+    print_green('--- fit_GSM() executed ---')
+    gsm_e_step(gsm_model, X, w, k)
+    gsm_m_step(gsm_model, X, w, k, _rYs)
+    print_green('--- fit_GSM() done ---')
+
+def gsm_e_step(gsm_model, X, w, k):
+    print_red('--- gsm_e_step() executed ---')
+    m, n = X.shape
+    for i in range(m):
+        den = 0
         for j in range(k):
-            mvn = multivariate_normal(cov=model.cov[j, :])
-            c_i_j = mvn.logpdf(x=X[:, i]) * model.mix[j]
-            density += c_i_j
-            cs[i, j] = c_i_j
-        cs[i, :] /= density
-    cs = normalize_log_likelihoods(cs)
-    print("End E-Step")
-# End function
+            num = multivariate_normal.pdf(x=X[:, i], cov=gsm_model.cov[j, :]) * gsm_model.mix[j]
+            den += num
+            w[i, j] = num
+        w[i, :] /= den
+        # assert w[i, :].sum() - 1 < 1e-4
+    print_red('--- gsm_e_step() done ---')
 
-
-def M_Step(X, model, cs):
-    print("Start M-Step")
-    D, M = X.shape
-    k = model.mix.shape[0]
+def gsm_m_step(gsm_model, X, w, k, _rYs):
+    print_red('--- gsm_m_step() executed ---')
+    m, n = X.shape
     for j in range(k):
-        c_j = cs[:, j].sum()
-        model.mix[j] = 1 / M * c_j
-        cov_j = np.zeros((D, D), dtype=float)
-        upper_r_j = 0
-        for i in range(M):
-            upper_r_j += np.sqrt((cs[i, j] * np.dot(np.dot(X[:, i].T, np.linalg.inv(model.cov[j, :])), X[:, i])))
-            cov_j += cs[i, j] * np.dot(X[:, i].T, X[:, i])
-            cov_j += 1e-6 * np.identity(D)  # regularize cov
-        r_j = upper_r_j / np.sqrt(D * c_j)
-        print("r_{}: {}".format(j, r_j))
-        model.cov[j, :] = (r_j**2) * (model.cov[j, :] + 1e-4 * np.identity(D))
-    print("End M-Step")
-# End function
+        const = w[:, j].sum()
+        gsm_model.mix[j] = 1 / m * const
+        _sigma_j = np.zeros((m, m))
+        for i in range(m):
+            _rYs[j] += np.sqrt((w[i, j] * np.dot(np.dot(X[:, i].T, np.linalg.inv(gsm_model.cov[j, :])), X[:, i])))
+            _sigma_j += w[i, j] * (X[:, i].T * X[:, i])
 
+        _rYs[j] = _rYs[j] / np.sqrt(m * const)
+        print(_rYs[j])
+        gsm_model.cov[j, :] = (_rYs[j]**2) * gsm_model.cov[j, :]
+    print_red('--- gsm_m_step() done ---')
 
-@benchmark
-def calc_weiner_filter(Y, mean, cov, noise_std):
-    cov_inv = np.linalg.inv(cov)
-    eye_noise_std = np.eye(cov_inv.shape[0]) / (noise_std ** 2)
-    left_arg = np.linalg.inv(cov_inv + eye_noise_std)
-    right_arg = calc_residuals((Y / (noise_std ** 2)), np.dot(cov_inv, mean), "plus")
-    X = np.dot(left_arg, right_arg)
-    return X
-# End function
+def save_model(model):
+    import pickle
+    from datetime import datetime
+    with open(f'./models/GSM_{datetime.now().strftime("%d-%m-%Y_%H_%M_%S")}.pkl', 'wb') as handle:
+        pickle.dump(model, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 if __name__ == '__main__':
-    pass
+    train_data = load_data('train_images.pickle')
+    test_data = load_data('test_images.pickle')
+
+    train_samples = sample_patches(train_data)
+    test_samples = sample_patches(test_data)
+
+    # do_mvn_stuff(train_data, train_samples, test_data, test_samples)
+    do_gsm_stuff(train_data, train_samples, test_data, test_samples)
+
