@@ -424,10 +424,10 @@ def fit(X, model):
     lls = []
     ll = 1
     previous_ll = 0
-    tol = 1e-2
+    tol = 1e-4
     iter = 0
     cs = np.asmatrix(np.zeros((M, k), dtype=float))
-    while np.abs(ll - previous_ll) > tol or iter <= 10:
+    while np.abs(ll - previous_ll) < tol or iter <= 20:
         if iter == 0:
             previous_ll = np.abs(GSM_log_likelihood(X, model))
             print("Initial GSM Log likelihood: {}".format(previous_ll))
