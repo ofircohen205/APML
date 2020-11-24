@@ -6,38 +6,38 @@ from Image_Denoising import *
 from utils import *
 
 
-def mvn(train_dataset, test_dataset, X_train, X_test, time):
+def mvn(test_dataset, X_train, X_test, time):
     mvn_model = learn_MVN(X_train)
-    # mvn_train_log_likelihood = np.abs(MVN_log_likelihood(X_train, mvn_model))
-    # mvn_test_log_likelihood = np.abs(MVN_log_likelihood(X_test, mvn_model))
-    # print("Train MVN Log Likelihood: {}".format(mvn_train_log_likelihood))
-    # print("Test MVN Log Likelihood: {}".format(mvn_test_log_likelihood))
+    mvn_test_log_likelihood = np.abs(MVN_log_likelihood(X_test, mvn_model))
+    print("Test MVN Log Likelihood: {}".format(mvn_test_log_likelihood))
     print("-------------------------------------------------")
     save_model(mvn_model, './output/mvn/mvn_model_{}.pkl'.format(time))
-    # test_denoise(mvn_model, train_dataset, MVN_Denoise)
-    test_denoise(mvn_model, test_dataset, MVN_Denoise)
+    img_dict_to_mse = test_denoise(mvn_model, test_dataset, MVN_Denoise)
+    print(img_dict_to_mse)
 # End function
 
 
-def gsm(train_dataset, test_dataset, X_train, X_test, time):
+def gsm(test_dataset, X_train, X_test, time):
     k_mixtures = 10
     gsm_model = learn_GSM(X_train, k_mixtures)
-    # gsm_train_log_likelihood = np.abs(GSM_log_likelihood(X_train, gsm_model))
-    # gsm_test_log_likelihood = np.abs(GSM_log_likelihood(X_test, gsm_model))
-    # print("Train MVN Log Likelihood: {}".format(gsm_train_log_likelihood))
-    # print("Test MVN Log Likelihood: {}".format(gsm_test_log_likelihood))
+    gsm_test_log_likelihood = np.abs(GSM_log_likelihood(X_test, gsm_model))
+    print("Test MVN Log Likelihood: {}".format(gsm_test_log_likelihood))
     print("-------------------------------------------------")
     save_model(gsm_model, './output/gsm/gsm_model_{}.pkl'.format(time))
-    # test_denoise(gsm_model, train_dataset, GSM_Denoise)
-    test_denoise(gsm_model, test_dataset, GSM_Denoise)
+    img_dict_to_mse = test_denoise(gsm_model, test_dataset, GSM_Denoise)
+    print(img_dict_to_mse)
 # End function
 
 
 def test_denoise(model, dataset, denoise_func):
+    img_dict_to_mse = {}
     for idx, image in enumerate(grayscale_and_standardize(dataset), 0):
         print("Start with image: {}".format(idx+1))
-        test_denoising(image, model, denoise_func)
+        noisy_mses, denoised_mses = test_denoising(image, model, denoise_func)
+        img_dict_to_mse['noisy_' + str(idx)] = noisy_mses
+        img_dict_to_mse['denoised_' + str(idx)] = denoised_mses
         print("-------------------------------------------------")
+    return img_dict_to_mse
 # End function
 
 
@@ -50,10 +50,10 @@ def main():
     test_patches = sample_patches(test_dataset)
 
     # MVN
-    # mvn(train_dataset, test_dataset, train_patches, test_patches, time)
+    # mvn(test_dataset, train_patches, test_patches, time)
 
     # GSM
-    gsm(train_dataset, test_dataset, train_patches, test_patches, time)
+    gsm(test_dataset, train_patches, test_patches, time)
 # End function
 
 

@@ -199,20 +199,28 @@ def test_denoising(image, model, denoise_function,
                           noise_range[i], patch_size))
 
     # calculate the MSE for each noise range:
+    noisy_mses = {}
+    denoised_mses = {}
     for i in range(len(noise_range)):
         print("noisy MSE for noise = " + str(noise_range[i]) + ":")
-        print(np.mean((crop_image(noisy_images[:, :, i],
-                                  patch_size) - cropped_original) ** 2))
+        noisy_mse = np.mean((crop_image(noisy_images[:, :, i],
+                                  patch_size) - cropped_original) ** 2)
+        noisy_mses[str(noise_range[i])] = noisy_mse
+        print(noisy_mse)
         print("denoised MSE for noise = " + str(noise_range[i]) + ":")
-        print(np.mean((cropped_original - denoised_images[i]) ** 2))
+        denoised_mse = np.mean((cropped_original - denoised_images[i]) ** 2)
+        denoised_mses[str(noise_range[i])] = denoised_mse
+        print(denoised_mse)
 
-    plt.figure()
+    plt.figure(figsize=(20, 20))
+    plt.axis('off')
     for i in range(len(noise_range)):
-        plt.subplot(2, len(noise_range), i + 1)
+        plt.subplot(2, len(noise_range), i + 1, xlabel='Noisy image', xticks=[], yticks=[])
         plt.imshow(noisy_images[:, :, i], cmap='gray')
-        plt.subplot(2, len(noise_range), i + 1 + len(noise_range))
+        plt.subplot(2, len(noise_range), i + 1 + len(noise_range), xlabel='Denoised image', xticks=[], yticks=[])
         plt.imshow(denoised_images[i], cmap='gray')
     plt.show()
+    return noisy_mses, denoised_mses
 
 
 class MVN_Model:
@@ -335,8 +343,8 @@ def learn_GSM(X, k):
     :param k: The number of components of the GSM model.
     :return: A trained GSM_Model object.
     """
-    rs = np.random.uniform(1.01, 1.21, k)
-    cov = np.array([((rs[idx] * np.cov(X)) + 1e-6 * np.identity(X.shape[0])) for idx in range(k)])
+    rs = np.random.uniform(1.0, 1.1, k)
+    cov = np.array([(rs[idx] * np.cov(X)) for idx in range(k)])
     mix = np.random.rand(k)
     mix /= np.sum(mix)
     gsm_model = GSM_Model(cov, mix)
