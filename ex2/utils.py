@@ -74,6 +74,7 @@ def create_dirs():
     if os.path.exists('./output') is not True:
         os.mkdir('./output/')
         os.mkdir('./output/mvn/')
+        os.mkdir('./output/mvn/plots/')
         os.mkdir('./output/gsm/')
         os.mkdir('./output/gsm/plots/')
         os.mkdir('./output/ica/')

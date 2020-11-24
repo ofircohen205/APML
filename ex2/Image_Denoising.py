@@ -262,7 +262,6 @@ class ICA_Model:
         self.mix = mix
 
 
-@benchmark
 def MVN_log_likelihood(X, model):
     """
     Given image patches and a MVN model, return the log likelihood of the patches
@@ -280,7 +279,6 @@ def MVN_log_likelihood(X, model):
     return -0.5 * (log_2pi + log_det + mahalanobis_distance).sum()
 
 
-@benchmark
 def GSM_log_likelihood(X, model):
     """
     Given image patches and a GSM model, return the log likelihood of the patches
@@ -337,11 +335,12 @@ def learn_GSM(X, k):
     :param k: The number of components of the GSM model.
     :return: A trained GSM_Model object.
     """
-    cov = np.array([(np.cov(X) + (1e-6 * np.identity(X.shape[0]))) for _ in range(k)])
-    mix = np.random.random(k)
-    mix /= np.sum(mix)  # create random pi_ys
+    rs = np.random.uniform(1.01, 1.21, k)
+    cov = np.array([((rs[idx] * np.cov(X)) + 1e-6 * np.identity(X.shape[0])) for idx in range(k)])
+    mix = np.random.rand(k)
+    mix /= np.sum(mix)
     gsm_model = GSM_Model(cov, mix)
-    return fit(X, gsm_model)
+    return fit(X, gsm_model, rs)
 
 
 def learn_ICA(X, k):
@@ -376,6 +375,7 @@ def MVN_Denoise(Y, mvn_model, noise_std):
     return calc_weiner_filter(Y, mvn_model.mean, mvn_model.cov, noise_std)
 
 
+@benchmark
 def GSM_Denoise(Y, gsm_model, noise_std):
     """
     Denoise every column in Y, assuming a GSM model and gaussian white noise.
@@ -391,13 +391,16 @@ def GSM_Denoise(Y, gsm_model, noise_std):
     """
     X = np.empty(Y.shape)
     k = gsm_model.mix.shape[0]
+    I = np.identity(gsm_model.cov[0, :].shape[0])
     for i in range(k):
-        upper_arg = gsm_model.mix[i] * (multivariate_normal(cov=(gsm_model.cov[i] + noise_std**2 * np.identity(gsm_model.cov[i].shape[0]))).logpdf(Y))
+        mvn = multivariate_normal(cov=(gsm_model.cov[i, :] + ((noise_std**2) * I)))
+        upper_arg = gsm_model.mix[i] * (mvn.logpdf(Y[:, i]))
         lower_arg = 0
         for j in range(k):
-            lower_arg += gsm_model.mix[j] * (multivariate_normal(cov=(gsm_model.cov[j] + noise_std**2 * np.identity(gsm_model.cov[j].shape[0]))).logpdf(Y))
+            inner_mvn = multivariate_normal(cov=(gsm_model.cov[j] + ((noise_std**2) * I)))
+            lower_arg += gsm_model.mix[j] * (inner_mvn.logpdf(Y[:, i]))
         c_i = upper_arg / lower_arg
-        weiner_i = calc_weiner_filter(Y, np.zeros(Y.shape[1]), gsm_model.cov[i, :], noise_std)
+        weiner_i = calc_weiner_filter(Y, np.zeros(Y.shape[0]), gsm_model.cov[i, :], noise_std)
         X += c_i * weiner_i
     return X
 
@@ -418,7 +421,7 @@ def ICA_Denoise(Y, ica_model, noise_std):
     # TODO: YOUR CODE HERE
 
 
-def fit(X, model):
+def fit(X, model, rs):
     D, M = X.shape
     k = model.mix.shape[0]
     lls = []
@@ -429,12 +432,12 @@ def fit(X, model):
     cs = np.asmatrix(np.zeros((M, k), dtype=float))
     while np.abs(ll - previous_ll) < tol or iter <= 20:
         if iter == 0:
-            previous_ll = np.abs(GSM_log_likelihood(X, model))
+            previous_ll = GSM_log_likelihood(X, model)
+            lls.append(previous_ll)
             print("Initial GSM Log likelihood: {}".format(previous_ll))
-        lls.append(previous_ll)
-        EM(X, model, cs)
+        EM(X, model, cs, rs)
         iter += 1
-        ll = np.abs(GSM_log_likelihood(X, model))
+        ll = GSM_log_likelihood(X, model)
         lls.append(ll)
         curr_time = current_time()
         save_model(model, './output/gsm/gsm_model_{}.pkl'.format(curr_time))
@@ -444,12 +447,12 @@ def fit(X, model):
     return model
 
 
-def EM(X, model, cs):
+def EM(X, model, cs, rs):
     # Initialization
     # E-Step
     E_Step(X, model, cs)
     # M-Step
-    M_Step(X, model, cs)
+    M_Step(X, model, cs, rs)
 # End function
 
 
@@ -470,27 +473,24 @@ def E_Step(X, model, cs):
 # End function
 
 
-def M_Step(X, model, cs):
+def M_Step(X, model, cs, rs):
     print("Start M-Step")
     D, M = X.shape
     k = model.mix.shape[0]
     for j in range(k):
         c_j = cs[:, j].sum()
         model.mix[j] = 1 / M * c_j
-        cov_j = np.zeros((D, D), dtype=float)
         upper_r_j = 0
         for i in range(M):
             upper_r_j += np.sqrt((cs[i, j] * np.dot(np.dot(X[:, i].T, np.linalg.inv(model.cov[j, :])), X[:, i])))
-            cov_j += cs[i, j] * np.dot(X[:, i].T, X[:, i])
-            cov_j += 1e-6 * np.identity(D)  # regularize cov
-        r_j = upper_r_j / np.sqrt(D * c_j)
-        print("r_{}: {}".format(j, r_j))
-        model.cov[j, :] = (r_j**2) * (model.cov[j, :] + 1e-4 * np.identity(D))
+
+        rs[j] = upper_r_j / np.sqrt(D * c_j)
+        print("r_{}: {}".format(j, rs[j]))
+        model.cov[j, :] = (rs[j] ** 2) * model.cov[j, :]
     print("End M-Step")
 # End function
 
 
-@benchmark
 def calc_weiner_filter(Y, mean, cov, noise_std):
     cov_inv = np.linalg.inv(cov)
     eye_noise_std = np.eye(cov_inv.shape[0]) / (noise_std ** 2)
