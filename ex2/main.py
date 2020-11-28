@@ -1,7 +1,6 @@
 # Name: Ofir Cohen
 # ID: 312255847
 # Date: 25/11/2020
-from utils import *
 from Image_Denoising import *
 from utils import *
 
@@ -21,7 +20,7 @@ def gsm(test_dataset, X_train, X_test, time):
     k_mixtures = 10
     gsm_model = learn_GSM(X_train, k_mixtures)
     gsm_test_log_likelihood = np.abs(GSM_log_likelihood(X_test, gsm_model))
-    print("Test MVN Log Likelihood: {}".format(gsm_test_log_likelihood))
+    print("Test GSM Log Likelihood: {}".format(gsm_test_log_likelihood))
     print("-------------------------------------------------")
     save_model(gsm_model, './output/gsm/gsm_model_{}.pkl'.format(time))
     img_dict_to_mse = test_denoise(gsm_model, test_dataset, GSM_Denoise)

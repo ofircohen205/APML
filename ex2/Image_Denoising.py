@@ -280,11 +280,14 @@ def MVN_log_likelihood(X, model):
     :return: The log likelihood of all the patches combined.
     """
     D, M = X.shape
-    log_2pi = D * np.log(2 * np.pi)
-    log_det = np.log(np.linalg.det(model.cov))
-    residuals = calc_residuals(X, model.mean, "minus")
-    mahalanobis_distance = np.dot(np.dot(residuals.T, np.linalg.inv(model.cov)), residuals)
-    return -0.5 * (log_2pi + log_det + mahalanobis_distance).sum()
+    X_normalized = normalize_log_likelihoods(X.copy())
+    mvn = multivariate_normal(mean=model.mean, cov=model.cov)
+    return mvn.logpdf(X_normalized.T).sum()
+    # log_2pi = D * np.log(2 * np.pi)
+    # log_det = np.log(np.linalg.det(model.cov))
+    # residuals = calc_residuals(X_normalized, model.mean, "minus")
+    # mahalanobis_distance = np.dot(np.dot(residuals.T, np.linalg.inv(model.cov)), residuals)
+    # return -0.5 * (log_2pi + log_det + mahalanobis_distance).sum()
 
 
 def GSM_log_likelihood(X, model):
@@ -343,8 +346,9 @@ def learn_GSM(X, k):
     :param k: The number of components of the GSM model.
     :return: A trained GSM_Model object.
     """
-    rs = np.random.uniform(1.0, 1.1, k)
-    cov = np.array([(rs[idx] * np.cov(X)) for idx in range(k)])
+    D, M = X.shape
+    rs = np.random.uniform(1, 1.1, k)
+    cov = np.array([(rs[idx] * np.cov(X) + 1e-6 * np.identity(D)) for idx in range(k)])
     mix = np.random.rand(k)
     mix /= np.sum(mix)
     gsm_model = GSM_Model(cov, mix)
@@ -435,28 +439,24 @@ def fit(X, model, rs):
     lls = []
     ll = 1
     previous_ll = 0
-    tol = 1e-4
+    tol = 1e-2
     iter = 0
     cs = np.asmatrix(np.zeros((M, k), dtype=float))
-    while np.abs(ll - previous_ll) < tol or iter <= 20:
-        if iter == 0:
-            previous_ll = GSM_log_likelihood(X, model)
-            lls.append(previous_ll)
-            print("Initial GSM Log likelihood: {}".format(previous_ll))
+    curr_time = current_time()
+    while np.abs(ll - previous_ll) > tol:
+        previous_ll = GSM_log_likelihood(X, model)
         EM(X, model, cs, rs)
+        save_model(model, './output/gsm/gsm_model_{}_{}.pkl'.format(curr_time, iter))
         iter += 1
         ll = GSM_log_likelihood(X, model)
-        lls.append(ll)
-        curr_time = current_time()
-        save_model(model, './output/gsm/gsm_model_{}.pkl'.format(curr_time))
         print("EM Iteration no.: {}. GSM Log likelihood: {}".format(iter, ll))
+        lls.append(ll)
     print("EM Done in iteration no.: {}. GSM Log likelihood: {}".format(iter, ll))
-    plot(lls, './output/gsm/plots')
+    # plot(lls, './output/gsm/plots')
     return model
 
 
 def EM(X, model, cs, rs):
-    # Initialization
     # E-Step
     E_Step(X, model, cs)
     # M-Step
@@ -466,9 +466,9 @@ def EM(X, model, cs, rs):
 
 def E_Step(X, model, cs):
     print("Start E-Step")
-    _, M = X.shape
+    D, M = X.shape
     k = model.mix.shape[0]
-    for i in range(M):
+    for i in range(D):
         density = 0
         for j in range(k):
             mvn = multivariate_normal(cov=model.cov[j, :])
@@ -487,13 +487,12 @@ def M_Step(X, model, cs, rs):
     k = model.mix.shape[0]
     for j in range(k):
         c_j = cs[:, j].sum()
-        model.mix[j] = 1 / M * c_j
-        upper_r_j = 0
-        for i in range(M):
-            upper_r_j += np.sqrt((cs[i, j] * np.dot(np.dot(X[:, i].T, np.linalg.inv(model.cov[j, :])), X[:, i])))
+        model.mix[j] = (1 / D) * c_j
+        for i in range(D):
+            rs[j] += np.sqrt((cs[i, j] * np.dot(np.dot(X[:, i].T, np.linalg.inv(model.cov[j, :])), X[:, i])))
 
-        rs[j] = upper_r_j / np.sqrt(D * c_j)
-        print("r_{}: {}".format(j, rs[j]))
+        rs[j] = rs[j] / np.sqrt(D * c_j)
+        # print("r_{}: {}".format(j, rs[j]))
         model.cov[j, :] = (rs[j] ** 2) * model.cov[j, :]
     print("End M-Step")
 # End function
