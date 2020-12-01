@@ -3,3 +3,6 @@
 **/*.zip
 **/*.tar
 **/venv/
+**/dataset/
+**/archive/
+**/__pycache__/

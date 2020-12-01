@@ -2,8 +2,10 @@ import pickle
 import matplotlib.pyplot as plt
 import numpy as np
 from sklearn import datasets
+from utils import *
+from Netflix_Preprocessing import *
 from mpl_toolkits.mplot3d import Axes3D
-import pydiffmap
+# import pydiffmap
 
 
 def digits_example():
@@ -125,6 +127,7 @@ def MDS(X, d):
     # Scree plot
     scree_plot(eigvals, "MDS")
 
+    # Generate Nxd reduced dataset
     diag_eigvals = np.diag(np.sqrt(eigvals[:d]))
     V = eigvecs[:, :d]
     result = np.dot(V, diag_eigvals)
@@ -157,83 +160,97 @@ def DiffusionMap(X, d, sigma, t):
     :param t: the scale of the diffusion (amount of time steps).
     :return: Nxd reduced data matrix.
     '''
-    # TODO: YOUR CODE HERE
-    pass
+    X_distances = calculate_distances(X)
+    N, _ = X_distances.shape
+
+    # Create kernel similiary matrix
+    kernel_similarity = np.asmatrix(np.exp(-(X_distances**2) / sigma))
+
+    # Normalize rows of K to form Markov Transition Matrix
+    D = np.zeros(N)
+    for j in range(N):
+        D[j] = kernel_similarity[j, :].sum()
+    kernel_similarity_diag = np.zeros((N, N))
+    for i in range(N):
+        kernel_similarity_diag[i, i] = D[i]
+    kernel_similarity_diag_inv = np.linalg.inv(kernel_similarity_diag)
+    markov_transition_matrix = np.dot(kernel_similarity_diag_inv, kernel_similarity)
+
+    # Diagonalize
+    eigvals, eigvecs = np.linalg.eigh(markov_transition_matrix)
+
+    # sort eigenvalues in descending order
+    idx = np.argsort(eigvals)[::-1]
+    eigvals = eigvals[idx]
+    eigvecs = eigvecs[:, idx]
+
+    # Generate Nxd reduced dataset
+    eigvals = eigvals ** t
+    diag_eigvals = np.asarray(np.diag(eigvals[1:(d+1)]))
+    V = eigvecs[:, 1:(d+1)]
+    result = np.dot(V, diag_eigvals)
+    return result.view(np.ndarray)
 
 
-def load_dataset(path):
-    with open(path, 'rb') as f:
-        dataset = pickle.load(f)
-    return dataset
+def swiss_roll():
+    swiss_roll_dataset, color = datasets.make_swiss_roll(n_samples=2000)
+    swiss_roll_dataset_distances = calculate_distances(swiss_roll_dataset)
+    swiss_roll_dataset_mds = MDS(swiss_roll_dataset_distances, 2)
+    swiss_roll_dataset_lle = LLE(swiss_roll_dataset, 2, 12)
+    swiss_roll_dataset_diffusion_map = DiffusionMap(swiss_roll_dataset, 2, 0.5, 15)
+    plot_data(swiss_roll_dataset, swiss_roll_dataset_mds, color)
+    plot_data(swiss_roll_dataset, swiss_roll_dataset_lle, color)
+    plot_data(swiss_roll_dataset, swiss_roll_dataset_diffusion_map, color)
 # End function
 
 
-def calculate_distances(dataset):
-    from sklearn.metrics import euclidean_distances
-    from scipy.spatial.distance import euclidean
-    return euclidean_distances(X=dataset)
-    # N, P = dataset.shape
-    # distances = np.zeros((N, N))
-    # for i in range(N):
-    #     for j in range(i+1, N):
-    #         distances[i, j] = euclidean(dataset[i, :], dataset[j, :])
-    # return distances
-# End function
-
-
-def scree_plot(eig_vals, name):
-    plt.figure()
-    xs = np.arange(len(eig_vals)) + 1
-    plt.plot(xs, eig_vals, 'ro-', linewidth=2)
-    plt.title("Scree Plot")
-    plt.xlabel("Matrix size")
-    plt.ylabel("Eigenvalue")
-    name = "Eigenvalues from {name}".format(name=name)
-    plt.legend([name], loc='best')
+def faces():
+    faces_path = './faces.pickle'
+    faces_dataset = load_dataset(faces_path)
+    faces_distances = calculate_distances(faces_dataset)
+    faces_mds = MDS(faces_distances, 8)
+    faces_lle = LLE(faces_dataset, 8, 12)
+    faces_diffusion_map = DiffusionMap(faces_dataset, 8, 0.5, 10)
+    faces_fig_mds = plot_with_images(faces_mds, faces_dataset, "MDS Faces dataset")
+    faces_fig_lle = plot_with_images(faces_lle, faces_dataset, "LLE Faces dataset")
+    faces_fig_diffusion_map = plot_with_images(faces_diffusion_map, faces_dataset, "Diffusion Map Faces dataset")
     plt.show()
 # End function
 
 
-def plot_data(dataset, dataset_reduced, color):
-    # plot the data:
-    fig = plt.figure()
-    ax = fig.add_subplot(211, projection='3d')
-    ax.scatter(dataset[:, 0], dataset[:, 1], dataset[:, 2], c=color, cmap=plt.cm.Spectral)
-    ax.set_title("Original data")
-    ax = fig.add_subplot(212)
-    ax.scatter(dataset_reduced[:, 0], dataset_reduced[:, 1], c=color, cmap=plt.cm.Spectral)
-    plt.axis('tight')
-    plt.xticks([]), plt.yticks([])
-    plt.title('Projected data')
-    plt.show()
+def genetic():
+    genetic_data_path = './genetic_data.pickle'
+    genetic_dataset = load_dataset(genetic_data_path)
+    genetic_distances = calculate_distances(genetic_dataset)
+    genetic_dataset_mds = MDS(genetic_dataset, 5)
+    plot_with_images(genetic_dataset_mds, genetic_dataset, "Genetic dataset")
+# End function
+
+
+def netflix():
+    netflix_preprocessing = NetflixPreprocessing(True)
+    # df_of_movies_info = netflix_preprocessing.create_movies_info_dataset()
+    # print(df_of_movies_info)
+    # mat_of_movies_and_users = netflix_preprocessing.create_netflix_dataset()
+    mat_of_movies_and_users = netflix_preprocessing.combine_dataset_files()
+    print(mat_of_movies_and_users)
+    # df_of_movies_info, mat_of_movies_and_users = netflix_preprocessing.load_files_from_disk()
 # End function
 
 
 def main():
+    create_dirs()
     # Swiss roll dataset
-    # swiss_roll_dataset, color = datasets.make_swiss_roll(n_samples=2000)
-    # swiss_roll_dataset_distances = calculate_distances(swiss_roll_dataset)
-    # swiss_roll_dataset_mds = MDS(swiss_roll_dataset_distances, 2)
-    # swiss_roll_dataset_lle = LLE(swiss_roll_dataset, 2, 12)
-    # plot_data(swiss_roll_dataset, swiss_roll_dataset_mds, color)
-    # plot_data(swiss_roll_dataset, swiss_roll_dataset_lle, color)
+    # swiss_roll()
 
     # Faces dataset
-    # faces_path = './datasets/faces.pickle'
-    # faces_dataset = load_dataset(faces_path)
-    # faces_distances = calculate_distances(faces_dataset)
-    # faces_mds = MDS(faces_distances, 8)
-    # faces_lle = LLE(faces_dataset, 8, 12)
-    # faces_fig_mds = plot_with_images(faces_mds, faces_dataset, "MDS Faces dataset")
-    # faces_fig_lle = plot_with_images(faces_lle, faces_dataset, "LLE Faces dataset")
-    # plt.show()
+    # faces()
 
     # Genetic dataset
-    # genetic_data_path = './datasets/genetic_data.pickle'
-    # genetic_dataset = load_dataset(genetic_data_path)
-    # genetic_distances = calculate_distances(genetic_dataset)
-    # genetic_dataset_mds = MDS(genetic_dataset, 5)
-    # plot_with_images(genetic_dataset_mds, genetic_dataset, "Genetic dataset")
+    # genetic()
+
+    # Netflix Prize dataset
+    netflix()
 # End function
 
 
