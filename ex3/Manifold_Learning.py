@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from sklearn import datasets
 from utils import *
-from Netflix_Preprocessing import *
+from NetflixPreprocessing import *
 from mpl_toolkits.mplot3d import Axes3D
 # import pydiffmap
 
@@ -228,13 +228,7 @@ def genetic():
 
 
 def netflix():
-    netflix_preprocessing = NetflixPreprocessing(True)
-    # df_of_movies_info = netflix_preprocessing.create_movies_info_dataset()
-    # print(df_of_movies_info)
-    # mat_of_movies_and_users = netflix_preprocessing.create_netflix_dataset()
-    mat_of_movies_and_users = netflix_preprocessing.combine_dataset_files()
-    print(mat_of_movies_and_users)
-    # df_of_movies_info, mat_of_movies_and_users = netflix_preprocessing.load_files_from_disk()
+    df_of_movies_info, mat_of_movies_and_users = netflix_preprocessing.load_files_from_disk()
 # End function
 
 
