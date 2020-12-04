@@ -11,12 +11,12 @@ def load_dataset(path):
 
 
 def calculate_distances(dataset):
-    from sklearn.metrics import euclidean_distances
+    from sklearn.metrics.pairwise import euclidean_distances
     return euclidean_distances(X=dataset)
 # End function
 
 
-def scree_plot(eig_vals, name):
+def scree_plot(eig_vals, name, file_name):
     plt.figure()
     xs = np.arange(len(eig_vals)) + 1
     plt.plot(xs, eig_vals, 'ro-', linewidth=2)
@@ -25,11 +25,12 @@ def scree_plot(eig_vals, name):
     plt.ylabel("Eigenvalue")
     name = "Eigenvalues from {name}".format(name=name)
     plt.legend([name], loc='best')
-    plt.show()
+    plt.savefig(file_name)
+    plt.clf()
 # End function
 
 
-def plot_data(dataset, dataset_reduced, color):
+def plot_data(dataset, dataset_reduced, color, file_name):
     # plot the data:
     fig = plt.figure()
     ax = fig.add_subplot(211, projection='3d')
@@ -40,11 +41,12 @@ def plot_data(dataset, dataset_reduced, color):
     plt.axis('tight')
     plt.xticks([]), plt.yticks([])
     plt.title('Projected data')
-    plt.show()
+    plt.savefig(file_name)
+    plt.clf()
 # End function
 
 
 def create_dirs():
-    if os.path.exists('./dataset/') is not True:
-        os.mkdir('./dataset/')
+    if not os.path.exists('./plots/'):
+        os.mkdir('./plots/')
 # End function

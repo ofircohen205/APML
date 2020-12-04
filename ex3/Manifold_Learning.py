@@ -5,7 +5,7 @@ from sklearn import datasets
 from utils import *
 from NetflixPreprocessing import *
 from mpl_toolkits.mplot3d import Axes3D
-# import pydiffmap
+import pydiffmap
 
 
 def digits_example():
@@ -125,7 +125,7 @@ def MDS(X, d):
     eigvecs = eigvecs[:, idx]
 
     # Scree plot
-    scree_plot(eigvals, "MDS")
+    scree_plot(eigvals, "MDS", './plots/scree_plot_mds.png')
 
     # Generate Nxd reduced dataset
     diag_eigvals = np.diag(np.sqrt(eigvals[:d]))
@@ -164,17 +164,10 @@ def DiffusionMap(X, d, sigma, t):
     N, _ = X_distances.shape
 
     # Create kernel similiary matrix
-    kernel_similarity = np.asmatrix(np.exp(-(X_distances**2) / sigma))
+    kernel_similarity = np.exp(-X_distances**2 / sigma)
 
     # Normalize rows of K to form Markov Transition Matrix
-    D = np.zeros(N)
-    for j in range(N):
-        D[j] = kernel_similarity[j, :].sum()
-    kernel_similarity_diag = np.zeros((N, N))
-    for i in range(N):
-        kernel_similarity_diag[i, i] = D[i]
-    kernel_similarity_diag_inv = np.linalg.inv(kernel_similarity_diag)
-    markov_transition_matrix = np.dot(kernel_similarity_diag_inv, kernel_similarity)
+    markov_transition_matrix = kernel_similarity / kernel_similarity.sum(axis=1).reshape(kernel_similarity.shape[1], 1)
 
     # Diagonalize
     eigvals, eigvecs = np.linalg.eigh(markov_transition_matrix)
@@ -184,51 +177,84 @@ def DiffusionMap(X, d, sigma, t):
     eigvals = eigvals[idx]
     eigvecs = eigvecs[:, idx]
 
+    # Scree plot
+    scree_plot(eigvals, "Diffusion Maps", './plots/scree_plot_diffusion_maps.png')
+
     # Generate Nxd reduced dataset
-    eigvals = eigvals ** t
-    diag_eigvals = np.asarray(np.diag(eigvals[1:(d+1)]))
+    eigvals = eigvals
+    diag_eigvals = np.asarray(np.diag(eigvals[1:(d+1)]**t))
     V = eigvecs[:, 1:(d+1)]
     result = np.dot(V, diag_eigvals)
-    return result.view(np.ndarray)
+    return result
 
 
 def swiss_roll():
+    from sklearn import manifold
     swiss_roll_dataset, color = datasets.make_swiss_roll(n_samples=2000)
     swiss_roll_dataset_distances = calculate_distances(swiss_roll_dataset)
+
     swiss_roll_dataset_mds = MDS(swiss_roll_dataset_distances, 2)
+    plot_data(swiss_roll_dataset, swiss_roll_dataset_mds, color, './plots/plot_data_mds.png')
+
+    # For checking my implementation - compared with sklearn results
+    # swiss_roll_dataset_mds_sklearn = manifold.MDS(n_components=2).fit(swiss_roll_dataset_distances)
+    # plot_data(swiss_roll_dataset, swiss_roll_dataset_mds_sklearn, color, './plots/plot_data_mds_sklearn.png')
+
+    swiss_roll_dataset_diffusion_map = DiffusionMap(swiss_roll_dataset, 2, 100, 1000)
+    plot_data(swiss_roll_dataset, swiss_roll_dataset_diffusion_map, color, './plots/plot_data_diffusion_map.png')
+
+    # For checking my implementation - compared with pydiffmap results
+    # swiss_roll_dataset_diffusion_map_pydiffmap = pydiffmap.diffusion_map.DiffusionMap(pydiffmap.kernel.Kernel(), n_evecs=2).fit_transform(swiss_roll_dataset)
+    # plot_data(swiss_roll_dataset, swiss_roll_dataset_diffusion_map_pydiffmap, color, './plots/plot_data_diffusion_map_pydiffmap.png')
+
     swiss_roll_dataset_lle = LLE(swiss_roll_dataset, 2, 12)
-    swiss_roll_dataset_diffusion_map = DiffusionMap(swiss_roll_dataset, 2, 0.5, 15)
-    plot_data(swiss_roll_dataset, swiss_roll_dataset_mds, color)
-    plot_data(swiss_roll_dataset, swiss_roll_dataset_lle, color)
-    plot_data(swiss_roll_dataset, swiss_roll_dataset_diffusion_map, color)
+    plot_data(swiss_roll_dataset, swiss_roll_dataset_lle, color, './plots/plot_data_lle.png')
 # End function
 
 
 def faces():
-    faces_path = './faces.pickle'
-    faces_dataset = load_dataset(faces_path)
+    from sklearn import manifold
+    faces_dataset = load_dataset('./faces.pickle')
     faces_distances = calculate_distances(faces_dataset)
+
     faces_mds = MDS(faces_distances, 8)
-    faces_lle = LLE(faces_dataset, 8, 12)
-    faces_diffusion_map = DiffusionMap(faces_dataset, 8, 0.5, 10)
     faces_fig_mds = plot_with_images(faces_mds, faces_dataset, "MDS Faces dataset")
+
+    # For checking my implementation - compared with sklearn results
+    # faces_mds_sklearn = manifold.MDS(n_components=8).fit(faces_distances)
+    # faces_fig_mds_sklearn = plot_with_images(faces_mds_sklearn, faces_dataset, "MDS Faces dataset sklearn")
+
+    faces_lle = LLE(faces_dataset, 8, 12)
     faces_fig_lle = plot_with_images(faces_lle, faces_dataset, "LLE Faces dataset")
-    faces_fig_diffusion_map = plot_with_images(faces_diffusion_map, faces_dataset, "Diffusion Map Faces dataset")
-    plt.show()
-# End function
 
+    # faces_diffusion_map = DiffusionMap(faces_dataset, 8, 100, 1000)
+    # faces_fig_diffusion_map = plot_with_images(faces_diffusion_map, faces_dataset, "Diffusion Map Faces dataset")
 
-def genetic():
-    genetic_data_path = './genetic_data.pickle'
-    genetic_dataset = load_dataset(genetic_data_path)
-    genetic_distances = calculate_distances(genetic_dataset)
-    genetic_dataset_mds = MDS(genetic_dataset, 5)
-    plot_with_images(genetic_dataset_mds, genetic_dataset, "Genetic dataset")
+    # For checking my implementation - compared with pydiffmap results
+    # faces_fig_diffusion_map_pydiffmap = plot_with_images(faces_diffusion_map_pydiffmap, faces_dataset, "Diffusion Map Faces dataset pydiffmap")
+    # faces_diffusion_map_pydiffmap = pydiffmap.diffusion_map.DiffusionMap(pydiffmap.kernel.Kernel(), n_evecs=8, alpha=0.5, ).fit_transform(faces_dataset)
 # End function
 
 
 def netflix():
-    df_of_movies_info, mat_of_movies_and_users = netflix_preprocessing.load_files_from_disk()
+    from sklearn.decomposition import NMF
+    from sklearn.cluster import Birch
+    mat_of_movies_and_users, df_of_movies_info = create_initial_data(remove_empty_cols=True, use_genres=True)
+    nmf = NMF(n_components=1000, init='random', random_state=42).fit(mat_of_movies_and_users)
+    plot_with_images(nmf, mat_of_movies_and_users, "Non negative matrix factorization")
+    clustered_dataset_labels = Birch(n_clusters=1000).fit_predict(nmf)
+# End function
+
+
+def genetic():
+    from sklearn import manifold
+    genetic_dataset = load_dataset('./genetic_data.pickle')
+    genetic_distances = calculate_distances(genetic_dataset)
+    print("Done calculating distances - genetic dataset")
+    genetic_dataset_mds = MDS(genetic_distances, 2)
+    # genetic_dataset_mds_sklearn = manifold.MDS(n_components=2).fit(genetic_distances)
+    plot_with_images(genetic_dataset_mds, genetic_dataset, "Genetic dataset")
+    # plot_with_images(genetic_dataset_mds_sklearn, genetic_dataset, "Genetic dataset sklearn")
 # End function
 
 
@@ -239,9 +265,6 @@ def main():
 
     # Faces dataset
     # faces()
-
-    # Genetic dataset
-    # genetic()
 
     # Netflix Prize dataset
     netflix()

@@ -39,121 +39,121 @@ def create_initial_data(remove_empty_cols=False, use_genres=False):
     :param use_genres
     :return:
     """
-	if not os.path.exists(PICKLE_FILE_NAME_NETFLIX_MATRIX+'.npz') or not os.path.exists(PICKLE_FILE_NAME_MOVIES_INFO):
-		print("Started processing the data from scratch")
-		# this matrix has movies indices as rows and user ids as columns, and inside it there's the rating
-		mat_of_movies_and_users = scipy.sparse.lil_matrix((17_770, 2_649_429))
-		with zipfile.ZipFile('archive.zip', 'r') as z:
-			with tqdm(total=17_770, position=0, leave=True) as pbar:
-				for filename in z.namelist():
-					if 'combined_data' in filename:
-						with z.open(filename, 'r') as f:
-							f = io.TextIOWrapper(f)
-							parse_single_ratings_file(f, mat_of_movies_and_users, pbar)
-					if 'movie_titles.csv' in filename:
-						with z.open(filename, 'r') as f:
-							df_of_movies_info = pd.read_csv(f, error_bad_lines=False, encoding='latin-1', index_col=0,
-															names=['year_of_release', 'title'])
-							if use_genres:
-								df_of_movies_genres = get_genres_of_movies()
-								df_of_movies_info = df_of_movies_info.join(df_of_movies_genres)
-								df_of_movies_info.fillna(0, inplace=True)
-			if remove_empty_cols:
-				mat_of_movies_and_users = remove_empty_cols_of_sparse_matrix(mat_of_movies_and_users)
-			save_created_files(df_of_movies_info, mat_of_movies_and_users)
-	else:
-		df_of_movies_info, mat_of_movies_and_users = load_files_from_disk()
-	return mat_of_movies_and_users, df_of_movies_info
+    if not os.path.exists(PICKLE_FILE_NAME_NETFLIX_MATRIX + '.npz') or not os.path.exists(PICKLE_FILE_NAME_MOVIES_INFO):
+        print("Started processing the data from scratch")
+        # this matrix has movies indices as rows and user ids as columns, and inside it there's the rating
+        mat_of_movies_and_users = scipy.sparse.lil_matrix((17_770, 2_649_429))
+        with zipfile.ZipFile('archive.zip', 'r') as z:
+            with tqdm(total=17_770, position=0, leave=True) as pbar:
+                for filename in z.namelist():
+                    if 'combined_data' in filename:
+                        with z.open(filename, 'r') as f:
+                            f = io.TextIOWrapper(f)
+                            parse_single_ratings_file(f, mat_of_movies_and_users, pbar)
+                    if 'movie_titles.csv' in filename:
+                        with z.open(filename, 'r') as f:
+                            df_of_movies_info = pd.read_csv(f, error_bad_lines=False, encoding='latin-1', index_col=0,
+                                                            names=['year_of_release', 'title'])
+                            if use_genres:
+                                df_of_movies_genres = get_genres_of_movies()
+                                df_of_movies_info = df_of_movies_info.join(df_of_movies_genres)
+                                df_of_movies_info.fillna(0, inplace=True)
+            if remove_empty_cols:
+                mat_of_movies_and_users = remove_empty_cols_of_sparse_matrix(mat_of_movies_and_users)
+            save_created_files(df_of_movies_info, mat_of_movies_and_users)
+    else:
+        df_of_movies_info, mat_of_movies_and_users = load_files_from_disk()
+    return mat_of_movies_and_users, df_of_movies_info
 
 
 def load_files_from_disk():
-	"""
-	This function loads both files from disk if they exist (one file is the ratings matrix and the other is the
-	dataframe with the information about the movies)
-	:return:
-	"""
-	print("Started loading data from disk")
-	mat_of_movies_and_users = scipy.sparse.load_npz(PICKLE_FILE_NAME_NETFLIX_MATRIX + '.npz').tolil()
-	df_of_movies_info = joblib.load(PICKLE_FILE_NAME_MOVIES_INFO)
-	print("Finished loading data from disk")
-	return df_of_movies_info, mat_of_movies_and_users
+    """
+    This function loads both files from disk if they exist (one file is the ratings matrix and the other is the
+    dataframe with the information about the movies)
+    :return:
+    """
+    print("Started loading data from disk")
+    mat_of_movies_and_users = scipy.sparse.load_npz(PICKLE_FILE_NAME_NETFLIX_MATRIX + '.npz').tolil()
+    df_of_movies_info = joblib.load(PICKLE_FILE_NAME_MOVIES_INFO)
+    print("Finished loading data from disk")
+    return df_of_movies_info, mat_of_movies_and_users
 
 
 def save_created_files(df_of_movies_info, mat_of_movies_and_users):
-	"""
-	This function saves the files which were created
-	:param df_of_movies_info:
-	:param mat_of_movies_and_users:
-	:return:
-	"""
-	try:
-		print("Started saving pickle files")
-		scipy.sparse.save_npz(PICKLE_FILE_NAME_NETFLIX_MATRIX, mat_of_movies_and_users.tocsr(), compressed=True)
-		joblib.dump(df_of_movies_info, PICKLE_FILE_NAME_MOVIES_INFO)
-		print("Finished saving pickle files")
-	except Exception as e:
-		print("failed to save files")
-		print(e)
+    """
+    This function saves the files which were created
+    :param df_of_movies_info:
+    :param mat_of_movies_and_users:
+    :return:
+    """
+    try:
+        print("Started saving pickle files")
+        scipy.sparse.save_npz(PICKLE_FILE_NAME_NETFLIX_MATRIX, mat_of_movies_and_users.tocsr(), compressed=True)
+        joblib.dump(df_of_movies_info, PICKLE_FILE_NAME_MOVIES_INFO)
+        print("Finished saving pickle files")
+    except Exception as e:
+        print("failed to save files")
+        print(e)
 
 
 def parse_single_ratings_file(f, mat_of_movies_and_users, pbar):
-	"""
-	This function handles a single ratings' file - parses the file and saves its data in the sparse matrix
-	:param f:
-	:param mat_of_movies_and_users:
-	:param pbar:
-	:return:
-	"""
-	for line in f:
-		if ',' in line:
-			customer_id, rating, date = line.split(',')
-			date = parser.parse(date)
-			rating = int(rating)
-			customer_id = int(customer_id)
-			mat_of_movies_and_users[movie_id - 1, customer_id - 1] = rating
-		else:
-			movie_id = int(line.split(':')[0])
-			pbar.update()
+    """
+    This function handles a single ratings' file - parses the file and saves its data in the sparse matrix
+    :param f:
+    :param mat_of_movies_and_users:
+    :param pbar:
+    :return:
+    """
+    for line in f:
+        if ',' in line:
+            customer_id, rating, date = line.split(',')
+            date = parser.parse(date)
+            rating = int(rating)
+            customer_id = int(customer_id)
+            mat_of_movies_and_users[movie_id - 1, customer_id - 1] = rating
+        else:
+            movie_id = int(line.split(':')[0])
+            pbar.update()
 
 
 def remove_empty_cols_of_sparse_matrix(mat_of_movies_and_users):
-	"""
-	This function receives the original matrix of movies and users' ratings and removes empty columns
-	(ids of users who have no ratings for any movie)
-	:param mat_of_movies_and_users:
-	:return:
-	"""
-	print("Started removing empty cols of matrix")
-	indices = np.nonzero(mat_of_movies_and_users)
-	columns_non_unique = indices[1]
-	unique_columns = sorted(set(columns_non_unique))
-	mat_of_movies_and_users = mat_of_movies_and_users.tocsc()[:, unique_columns]
-	print("Finished removing empty cols of matrix")
-	return mat_of_movies_and_users
+    """
+    This function receives the original matrix of movies and users' ratings and removes empty columns
+    (ids of users who have no ratings for any movie)
+    :param mat_of_movies_and_users:
+    :return:
+    """
+    print("Started removing empty cols of matrix")
+    indices = np.nonzero(mat_of_movies_and_users)
+    columns_non_unique = indices[1]
+    unique_columns = sorted(set(columns_non_unique))
+    mat_of_movies_and_users = mat_of_movies_and_users.tocsc()[:, unique_columns]
+    print("Finished removing empty cols of matrix")
+    return mat_of_movies_and_users
 
 
 def get_genres_of_movies():
-	"""
-	This function reads the file named 'netflix_genres.csv' which has a mapping between movie id and its genre.
-	It prints all unique genres and return a dataframe which is a one-hot encoding - the dataframe contains all
-	genres as columns, and 1 if this movie is from this genre, and 0 otherwise (because a movie usually corresponds
-	to more than one genre)
-	:return:
-	"""
-	df_of_genres = pd.read_csv('netflix_genres.csv')
-	all_genres = set()
-	for movie_genre in df_of_genres['genres'].to_list():
-		all_genres.update(movie_genre.split('|'))
-	print("all genres are:")
-	print(all_genres)
-	print("Number of genres is: ")
-	print(len(all_genres))
+    """
+    This function reads the file named 'netflix_genres.csv' which has a mapping between movie id and its genre.
+    It prints all unique genres and return a dataframe which is a one-hot encoding - the dataframe contains all
+    genres as columns, and 1 if this movie is from this genre, and 0 otherwise (because a movie usually corresponds
+    to more than one genre)
+    :return:
+    """
+    df_of_genres = pd.read_csv('netflix_genres.csv')
+    all_genres = set()
+    for movie_genre in df_of_genres['genres'].to_list():
+        all_genres.update(movie_genre.split('|'))
+    print("all genres are:")
+    print(all_genres)
+    print("Number of genres is: ")
+    print(len(all_genres))
 
-	df_of_movies_and_all_genres = pd.DataFrame(columns=all_genres)
-	for idx, row in df_of_genres.iterrows():
-		movie_id = row[0]
-		movie_genres = row[1].split('|')
-		for movie_genre in movie_genres:
-			df_of_movies_and_all_genres.loc[movie_id, movie_genre] = 1
-	df_of_movies_and_all_genres.fillna(0, inplace=True)
-	return df_of_movies_and_all_genres
+    df_of_movies_and_all_genres = pd.DataFrame(columns=all_genres)
+    for idx, row in df_of_genres.iterrows():
+        movie_id = row[0]
+        movie_genres = row[1].split('|')
+        for movie_genre in movie_genres:
+            df_of_movies_and_all_genres.loc[movie_id, movie_genre] = 1
+    df_of_movies_and_all_genres.fillna(0, inplace=True)
+    return df_of_movies_and_all_genres
