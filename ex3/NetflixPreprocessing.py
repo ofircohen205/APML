@@ -10,7 +10,8 @@ from tqdm import tqdm
 
 PICKLE_FILE_NAME_NETFLIX_MATRIX = 'netflix_matrix'
 PICKLE_FILE_NAME_MOVIES_INFO = 'movies_info.pkl'
-
+ROW_SIZE = 17_770
+COL_SIZE = 2_649_429
 
 def create_initial_data(remove_empty_cols=False, use_genres=False):
     """
@@ -42,7 +43,7 @@ def create_initial_data(remove_empty_cols=False, use_genres=False):
     if not os.path.exists(PICKLE_FILE_NAME_NETFLIX_MATRIX + '.npz') or not os.path.exists(PICKLE_FILE_NAME_MOVIES_INFO):
         print("Started processing the data from scratch")
         # this matrix has movies indices as rows and user ids as columns, and inside it there's the rating
-        mat_of_movies_and_users = scipy.sparse.lil_matrix((17_770, 2_649_429))
+        mat_of_movies_and_users = scipy.sparse.lil_matrix((ROW_SIZE, COL_SIZE))
         with zipfile.ZipFile('archive.zip', 'r') as z:
             with tqdm(total=17_770, position=0, leave=True) as pbar:
                 for filename in z.namelist():

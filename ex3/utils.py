@@ -16,6 +16,11 @@ def calculate_distances(dataset):
 # End function
 
 
+def generate_noised_dataset():
+    pass
+# End function
+
+
 def scree_plot(eig_vals, name, file_name):
     plt.figure()
     xs = np.arange(len(eig_vals)) + 1
@@ -49,4 +54,6 @@ def plot_data(dataset, dataset_reduced, color, file_name):
 def create_dirs():
     if not os.path.exists('./plots/'):
         os.mkdir('./plots/')
+    if not os.path.exists('./dataset/'):
+        os.mkdir('./dataset/')
 # End function

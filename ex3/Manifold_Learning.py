@@ -239,10 +239,19 @@ def faces():
 def netflix():
     from sklearn.decomposition import NMF
     from sklearn.cluster import Birch
-    mat_of_movies_and_users, df_of_movies_info = create_initial_data(remove_empty_cols=True, use_genres=True)
-    nmf = NMF(n_components=1000, init='random', random_state=42).fit(mat_of_movies_and_users)
-    plot_with_images(nmf, mat_of_movies_and_users, "Non negative matrix factorization")
-    clustered_dataset_labels = Birch(n_clusters=1000).fit_predict(nmf)
+    from Netflix_Preprocessing import NetflixPreprocessing
+    netflix_preprocessing = NetflixPreprocessing(use_genres=True)
+    # netflix_dataset = netflix_preprocessing.create_movies_and_users_dataset()
+    netflix_preprocessing.combine_dataset_files()
+    # netflix_dataset_reduced = netflix_dataset.drop(netflix_dataset.columns[[0]], axis=1)
+
+    # print(netflix_dataset)
+
+    # netflix_dataset, df_of_movies_info = netflix_preprocessing.load_files_from_disk()
+    # mat_of_movies_and_users, df_of_movies_info = create_initial_data(remove_empty_cols=True, use_genres=True)
+    # nmf = NMF(n_components=1000, init='random', random_state=42).fit(mat_of_movies_and_users)
+    # plot_with_images(nmf, mat_of_movies_and_users, "Non negative matrix factorization")
+    # clustered_dataset_labels = Birch(n_clusters=1000).fit_predict(nmf)
 # End function
 
 

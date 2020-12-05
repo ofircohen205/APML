@@ -35,13 +35,18 @@ class NetflixPreprocessing:
     def __init__(self, use_genres):
         self._use_genres = use_genres
         self.netflix_matrix_file_name = 'netflix_matrix.npz'
-        self.movies_info_file_name = 'movies_info.pkl'
+        self.netflix_matrix_file_name_csv = 'netflix_matrix.csv'
+        self.netflix_matrix_combined_csv = 'netflix_matrix_combined.csv'
+        self.movies_info_file_name = 'movies_info.csv'
         self.path = './archive/'
-        self.files_path = './dataset/'
+        self.files_path = './'
+        self.dataset_path = './dataset/'
         self.csv_prefix = 'mat_of_movies_and_users_'
+    # End init
 
     def create_movies_info_dataset(self, file_name='movie_titles.csv'):
         if not os.path.exists(self.movies_info_file_name):
+            print("Started processing the data from scratch")
             with open(os.path.join(self.path, file_name), 'rb') as f:
                 df_of_movies_info = pd.read_csv(f, error_bad_lines=False, encoding='latin-1', index_col=0,
                                                 names=['year_of_release', 'title'])
@@ -50,10 +55,12 @@ class NetflixPreprocessing:
                     df_of_movies_info = df_of_movies_info.join(df_of_movies_genres)
                     df_of_movies_info.fillna(0, inplace=True)
 
-            self.save_created_files(df_of_movies_info, self.movies_info_file_name)
-            return load_dataset(self.files_path + self.movies_info_file_name)
-
-        return load_dataset(self.files_path + self.movies_info_file_name)
+            df_of_movies_info.to_csv(self.movies_info_file_name)
+            print("Ended processing the data from scratch")
+            return pd.read_csv(self.movies_info_file_name)
+        else:
+            print("Loading the movies info data from directory")
+            return pd.read_csv(self.movies_info_file_name)
     # End function
 
     def get_genres_of_movies(self):
@@ -83,116 +90,82 @@ class NetflixPreprocessing:
         return df_of_movies_and_all_genres
     # End function
 
-    def create_netflix_dataset(self):
+    def create_movies_and_users_dataset(self):
         """
-        :param path: path for the archive folder
         :return:
         """
-        if not os.path.exists(self.netflix_matrix_file_name):
+        if not os.path.exists(self.netflix_matrix_file_name_csv):
             print("Started processing the data from scratch")
             # this matrix has movies indices as rows and user ids as columns, and inside it there's the rating
-            dataframes_list = []
+            movies_info_df = self.create_movies_info_dataset()
             for idx, filename in enumerate(os.listdir(self.path), 0):
                 if 'combined_data' in filename:
-                    self.parse_single_ratings_file(os.path.join(self.path, filename), idx+1)
+                    self.parse_single_ratings_file(os.path.join(self.path, filename), idx+1, movies_info_df)
 
-            mat_of_movies_and_users_df = self.combine_dataset_files()
-            return mat_of_movies_and_users_df
+            self.combine_dataset_files()
+            print("Ended processing the data from scratch")
+            return pd.read_csv(self.netflix_matrix_file_name_csv)
         else:
-            return load_dataset('./dataset/{}'.format(self.netflix_matrix_file_name))
+            print("Loading the movies and users data from directory")
+            return pd.read_csv(self.netflix_matrix_file_name_csv)
     # End function
 
-    def parse_single_ratings_file(self, fname, number):
+    def parse_single_ratings_file(self, fname, number, movies_info_df, skip_number=3):
         """
         This function handles a single ratings' file - parses the file and saves its data in the sparse matrix
         :param fname: path for the file we read from
         :param number: number of the file we are reading
+        :param skip_number: skip saving rows every X times
         :return:
         """
+        from sklearn.utils import shuffle
         print("Start saving txt file number {} as csv file".format(number))
-        # mat_of_movies_and_users = scipy.sparse.lil_matrix((17_770, 2_649_429))
         rows_list = []
-        movie_id = 1
+        counter = 0
         with open(fname, 'r') as f:
             for line in f:
                 if ',' in line:
                     customer_id, rating, date = line.split(',')
-                    date = parser.parse(date)
                     rating = int(rating)
                     customer_id = int(customer_id)
-                    rows_list.append({
-                        'movie_id': movie_id - 1,
-                        'customer_id': customer_id,
-                        'rating': rating})
+                    if counter % skip_number == 0:
+                        rows_list.append({
+                            'movie_id': movie_id,
+                            'customer_id': customer_id,
+                            'rating': rating})
+                    counter += 1
                 else:
                     if line.__contains__(':'):
-                        movie_id = int(line.split(':')[0])
                         if rows_list.__len__() > 0:
                             inner_number = str(number) + str(movie_id)
-                            pd_to_save_name = self.files_path + self.csv_prefix + '{}.csv'.format(inner_number)
-                            mat_of_movies_and_users = pd.DataFrame(rows_list)
-                            mat_of_movies_and_users.to_csv(pd_to_save_name)
+                            pd_to_save_name = self.dataset_path + self.csv_prefix + '{}.csv'.format(inner_number)
+                            mat_of_movies_and_users_df = pd.DataFrame(rows_list)
+                            movie_id_info = movies_info_df.iloc[movie_id-1]
+                            for col in movies_info_df.columns:
+                                if col == 'Unnamed: 0':
+                                    continue
+                                mat_of_movies_and_users_df[col] = movie_id_info.loc[col]
+                            mat_of_movies_and_users_df.to_csv(pd_to_save_name)
                             rows_list = []
+                        movie_id = int(line.split(':')[0])
+        inner_number = str(number) + str(movie_id)
+        pd_to_save_name = self.dataset_path + self.csv_prefix + '{}.csv'.format(inner_number)
+        mat_of_movies_and_users_df = pd.DataFrame(rows_list)
+        mat_of_movies_and_users_df.to_csv(pd_to_save_name)
         print("End saving txt file number {} as csv file".format(number))
     # End function
 
     def combine_dataset_files(self):
         print("Start combining dataset files")
-        dataframes_list = []
         mat_of_movies_and_users_df = pd.DataFrame()
-        for idx, filename in enumerate(os.listdir(self.files_path), 0):
+        csv_list = []
+        for idx, filename in enumerate(os.listdir(self.dataset_path), 0):
             if "mat_of_movies_and_users_" in filename:
-                csv_file = self.files_path + filename
+                csv_file = self.dataset_path + filename
                 df = pd.read_csv(csv_file)
-                df.drop(df.columns[[0]], axis=1)
-                dataframes_list.append(df)
-                mat_of_movies_and_users_df = pd.concat(dataframes_list)
-        self.save_created_files(mat_of_movies_and_users_df, self.netflix_matrix_file_name)
+                csv_list.append(df)
+        mat_of_movies_and_users_df = pd.concat(csv_list)
+        mat_of_movies_and_users_df.to_csv(self.netflix_matrix_file_name_csv)
         print("End combining dataset files")
-        return load_dataset(self.files_path + self.netflix_matrix_file_name)
-
-    def remove_empty_cols_of_sparse_matrix(self, mat_of_movies_and_users):
-        """
-        This function receives the original matrix of movies and users' ratings and removes empty columns
-        (ids of users who have no ratings for any movie)
-        :param mat_of_movies_and_users:
-        :return:
-        """
-        print("Started removing empty cols of matrix")
-        indices = np.nonzero(mat_of_movies_and_users)
-        columns_non_unique = indices[1]
-        unique_columns = sorted(set(columns_non_unique))
-        mat_of_movies_and_users = mat_of_movies_and_users.tocsc()[:, unique_columns]
-        print("Finished removing empty cols of matrix")
-        return mat_of_movies_and_users
-    # End function
-
-    def load_files_from_disk(self):
-        """
-        This function loads both files from disk if they exist (one file is the ratings matrix and the other is the
-        dataframe with the information about the movies)
-        :return:
-        """
-        print("Started loading data from disk")
-        mat_of_movies_and_users = scipy.sparse.load_npz(self.netflix_matrix_file_name).tolil()
-        df_of_movies_info = joblib.load(self.movies_info_file_name)
-        print("Finished loading data from disk")
-        return df_of_movies_info, mat_of_movies_and_users
-    # End function
-
-    def save_created_files(self, df, name):
-        """
-        This function saves the files which were created
-        :param df: dataframe to save
-        :param name: name of the file
-        :return:
-        """
-        try:
-            print("Started saving pickle file")
-            joblib.dump(df, name)
-            print("Finished saving pickle file")
-        except Exception as e:
-            print("failed to save file")
-            print(e)
     # End function
 # End class
