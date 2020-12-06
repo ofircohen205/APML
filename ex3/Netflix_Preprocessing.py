@@ -110,7 +110,7 @@ class NetflixPreprocessing:
             return pd.read_csv(self.netflix_matrix_file_name_csv)
     # End function
 
-    def parse_single_ratings_file(self, fname, number, movies_info_df, skip_number=3):
+    def parse_single_ratings_file(self, fname, number, movies_info_df, skip_number=4):
         """
         This function handles a single ratings' file - parses the file and saves its data in the sparse matrix
         :param fname: path for the file we read from

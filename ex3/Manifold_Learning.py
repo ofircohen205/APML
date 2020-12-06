@@ -3,7 +3,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from sklearn import datasets
 from utils import *
-from NetflixPreprocessing import *
+from Netflix_Challenge import *
+from sklearn.manifold import TSNE
+from sklearn.decomposition import SparsePCA
 from mpl_toolkits.mplot3d import Axes3D
 import pydiffmap
 
@@ -232,38 +234,19 @@ def faces():
 
     # For checking my implementation - compared with pydiffmap results
     # faces_fig_diffusion_map_pydiffmap = plot_with_images(faces_diffusion_map_pydiffmap, faces_dataset, "Diffusion Map Faces dataset pydiffmap")
-    # faces_diffusion_map_pydiffmap = pydiffmap.diffusion_map.DiffusionMap(pydiffmap.kernel.Kernel(), n_evecs=8, alpha=0.5, ).fit_transform(faces_dataset)
+    # faces_diffusion_map_pydiffmap = pydiffmap.diffusion_map.DiffusionMap(pydiffmap.kernel.Kernel(), n_evecs=8, alpha=0.5).fit_transform(faces_dataset)
 # End function
 
 
 def netflix():
-    from sklearn.decomposition import NMF
-    from sklearn.cluster import Birch
-    from Netflix_Preprocessing import NetflixPreprocessing
-    netflix_preprocessing = NetflixPreprocessing(use_genres=True)
-    # netflix_dataset = netflix_preprocessing.create_movies_and_users_dataset()
-    netflix_preprocessing.combine_dataset_files()
-    # netflix_dataset_reduced = netflix_dataset.drop(netflix_dataset.columns[[0]], axis=1)
+    netflix_challenge = Netflix_Challenge(True, True)
+    # netflix_challenge.__inspect__movies__()
+    # netflix_challenge.__inspect__rating__()
+    netflix_challenge.__execute_diffusion_maps__(load_pca=True, load_diffusion_maps=False)
 
-    # print(netflix_dataset)
-
-    # netflix_dataset, df_of_movies_info = netflix_preprocessing.load_files_from_disk()
-    # mat_of_movies_and_users, df_of_movies_info = create_initial_data(remove_empty_cols=True, use_genres=True)
-    # nmf = NMF(n_components=1000, init='random', random_state=42).fit(mat_of_movies_and_users)
+    # tsne = TSNE(n_components=3).fit_transform()
     # plot_with_images(nmf, mat_of_movies_and_users, "Non negative matrix factorization")
     # clustered_dataset_labels = Birch(n_clusters=1000).fit_predict(nmf)
-# End function
-
-
-def genetic():
-    from sklearn import manifold
-    genetic_dataset = load_dataset('./genetic_data.pickle')
-    genetic_distances = calculate_distances(genetic_dataset)
-    print("Done calculating distances - genetic dataset")
-    genetic_dataset_mds = MDS(genetic_distances, 2)
-    # genetic_dataset_mds_sklearn = manifold.MDS(n_components=2).fit(genetic_distances)
-    plot_with_images(genetic_dataset_mds, genetic_dataset, "Genetic dataset")
-    # plot_with_images(genetic_dataset_mds_sklearn, genetic_dataset, "Genetic dataset sklearn")
 # End function
 
 
