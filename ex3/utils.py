@@ -9,6 +9,7 @@ import scipy.sparse
 import numpy as np
 import joblib
 from tqdm import tqdm
+from sklearn.metrics.pairwise import euclidean_distances
 
 
 PICKLE_FILE_NAME_NETFLIX_MATRIX = 'netflix_matrix'
@@ -16,6 +17,14 @@ PICKLE_FILE_NAME_MOVIES_INFO = 'movies_info.pkl'
 PICKLE_FILE_NAME_NETFLIX_MATRIX_INT8 = 'netflix_matrix_int8'
 ROW_SIZE = 17_770
 COL_SIZE = 2_649_429
+
+
+def create_dirs():
+    if not os.path.exists('./plots/'):
+        os.mkdir('./plots/')
+    if not os.path.exists('./dataset/'):
+        os.mkdir('./dataset/')
+# End function
 
 
 def create_initial_data(remove_empty_cols=False, use_genres=False):
@@ -70,6 +79,7 @@ def create_initial_data(remove_empty_cols=False, use_genres=False):
     else:
         df_of_movies_info, mat_of_movies_and_users = load_files_from_disk()
     return mat_of_movies_and_users, df_of_movies_info
+# End function
 
 
 def load_files_from_disk():
@@ -83,6 +93,7 @@ def load_files_from_disk():
     df_of_movies_info = joblib.load(PICKLE_FILE_NAME_MOVIES_INFO)
     print("Finished loading data from disk")
     return df_of_movies_info, mat_of_movies_and_users
+# End function
 
 
 def save_created_files(df_of_movies_info, mat_of_movies_and_users):
@@ -100,6 +111,7 @@ def save_created_files(df_of_movies_info, mat_of_movies_and_users):
     except Exception as e:
         print("failed to save files")
         print(e)
+# End function
 
 
 def parse_single_ratings_file(f, mat_of_movies_and_users, pbar):
@@ -120,6 +132,7 @@ def parse_single_ratings_file(f, mat_of_movies_and_users, pbar):
         else:
             movie_id = int(line.split(':')[0])
             pbar.update()
+# End function
 
 
 def remove_empty_cols_of_sparse_matrix(mat_of_movies_and_users):
@@ -136,6 +149,7 @@ def remove_empty_cols_of_sparse_matrix(mat_of_movies_and_users):
     mat_of_movies_and_users = mat_of_movies_and_users.tocsc()[:, unique_columns]
     print("Finished removing empty cols of matrix")
     return mat_of_movies_and_users
+# End function
 
 
 def get_genres_of_movies():
@@ -163,6 +177,19 @@ def get_genres_of_movies():
             df_of_movies_and_all_genres.loc[movie_id, movie_genre] = 1
     df_of_movies_and_all_genres.fillna(0, inplace=True)
     return df_of_movies_and_all_genres
+# End function
+
+
+def get_ids_by_genres(all_movies_size):
+    genres_df = pd.read_csv('netflix_genres.csv')
+    genres = [None] * all_movies_size
+    for id, genre in zip(genres_df['movieId'].to_list(), genres_df['genres'].to_list()):
+        movie_genres = genre.split('|')
+        if len(movie_genres) == 1:
+            genres[id] = movie_genres[0]
+
+    return np.asarray(genres)
+# End function
 
 
 def load_dataset(path):
@@ -173,16 +200,58 @@ def load_dataset(path):
 
 
 def calculate_distances(dataset):
-    from sklearn.metrics.pairwise import euclidean_distances
     return euclidean_distances(X=dataset)
 # End function
 
 
-def generate_noised_dataset():
-    pass
+def generate_noised_dataset(num_samples=2000, dim=2, orthogonal_matrix_dim=75):
+    data = np.random.uniform(-1, 1, (num_samples, dim))
+    matrix = np.random.normal(0, 1, size=(orthogonal_matrix_dim, orthogonal_matrix_dim))
+    orthogonal_matrix, _ = np.linalg.qr(matrix)
+    return data, orthogonal_matrix
 # End function
 
 
+def get_mds_eig_entities(X):
+    N, _ = X.shape
+    H = np.eye(N) - np.ones((N, N)) / N
+    S = -0.5 * np.dot(np.dot(H, (X ** 2)), H)
+
+    # Diagonalize
+    eigvals, eigvecs = np.linalg.eigh(S)
+
+    # sort eigenvalues in descending order
+    idx = np.argsort(eigvals)[::-1]
+    eigvals = eigvals[idx]
+    eigvecs = eigvecs[:, idx]
+    return eigvals, eigvecs
+# End function
+
+
+def get_diffusion_maps_eig_entites(X, sigma):
+    X_distances = calculate_distances(X)
+    N, _ = X_distances.shape
+
+    # Create kernel similiary matrix
+    kernel_similarity = np.exp(-X_distances ** 2 / sigma)
+
+    # Normalize rows of K to form Markov Transition Matrix
+    markov_transition_matrix = kernel_similarity / kernel_similarity.sum(axis=1).reshape(kernel_similarity.shape[1], 1)
+
+    # Diagonalize
+    eigvals, eigvecs = np.linalg.eigh(markov_transition_matrix)
+
+    # sort eigenvalues in descending order
+    idx = np.argsort(eigvals)[::-1]
+    eigvals = eigvals[idx]
+    eigvecs = eigvecs[:, idx]
+    return eigvals, eigvecs
+# End function
+
+
+###################################################################
+############################## PLOTS ##############################
+###################################################################
 def scree_plot(eig_vals, name, file_name):
     plt.figure()
     xs = np.arange(len(eig_vals)) + 1
@@ -194,6 +263,15 @@ def scree_plot(eig_vals, name, file_name):
     plt.legend([name], loc='best')
     plt.savefig(file_name)
     plt.clf()
+# End function
+
+
+def scree_plot_noised(eigvals, size, color, label, x_label, y_label):
+    sing_values = np.arange(size) + 1
+    plt.plot(sing_values, eigvals, f'{color}o-', linewidth=2, label=label)
+    plt.title('Scree Plot')
+    plt.xlabel(x_label)
+    plt.ylabel(y_label)
 # End function
 
 
@@ -213,21 +291,51 @@ def plot_data(dataset, dataset_reduced, color, file_name):
 # End function
 
 
-def plot_with_text(data, labels, size=25):
-    fig = plt.figure(figsize=(10, 10))
+def scatter_plot_2d(data, genres, all_data=False, label='Scatter'):
+    fig = plt.figure()
     ax = fig.add_subplot(111)
+    if all_data is False:
+        most_viewed_genres = ['Drama', 'Comedy', 'Romance', 'Thriller', 'Action', 'Crime']
+        cmap = create_random_cmap(most_viewed_genres.__len__())
+        for i, genre in enumerate(most_viewed_genres):
+            idx = np.where(genres == genre)[0]
+            ax.scatter(data[idx, 0], data[idx, 1], label=genre, marker='.', cmap=cmap)
+        ax.set_title(label)
+        plt.legend(loc='best')
+        plt.show()
 
-    ax.scatter(data[:, 0], data[:, 1], marker='.', alpha=0.7)
-    for _ in range(size):
-        i = np.random.choice(len(labels))
-        ax.annotate(labels[i], (data[i, 0], data[i, 1]))
+    else:
+        genres_iter = list(set(genres))
+        cmap = create_random_cmap(len(genres_iter))
+        for i, genre in enumerate(genres_iter):
+            idx = np.where(genres == genre)[0]
+            ax.scatter(data[idx, 0], data[idx, 1], label=genre, marker='.', cmap=cmap)
+        ax.set_title(label)
+        plt.legend(loc='best')
+        plt.show()
+# End function
+
+
+def scatter_plot_3d(data, genres, label='Scatter'):
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    most_viewed_genres = ['Drama', 'Comedy', 'Romance', 'Thriller', 'Action', 'Crime']
+    for i, genre in enumerate(most_viewed_genres):
+        idx = np.where(genres == genre)[0]
+        ax.scatter(data[idx, 0], data[idx, 1], label=genre, marker='.')
+
+    ax.set_title(label)
+    plt.legend(loc='best')
     plt.show()
 # End function
 
 
-def create_dirs():
-    if not os.path.exists('./plots/'):
-        os.mkdir('./plots/')
-    if not os.path.exists('./dataset/'):
-        os.mkdir('./dataset/')
+def create_random_cmap(length):
+    cmap = plt.get_cmap(np.random.choice(["Set1", "Set2", "Set3", "Dark2", "Accent"]))
+    cmap.colors = cmap.colors[:length]
+    cmap.N = length
+    cmap._i_bad = length + 2
+    cmap._i_over = length + 1
+    cmap._i_under = length
+    return cmap
 # End function

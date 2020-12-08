@@ -114,20 +114,7 @@ def MDS(X, d):
     :param d: the dimension.
     :return: Nxd reduced data point matrix.
     '''
-    N, _ = X.shape
-    H = np.eye(N) - np.ones((N, N)) / N
-    S = -0.5 * np.dot(np.dot(H, (X**2)), H)
-
-    # Diagonalize
-    eigvals, eigvecs = np.linalg.eigh(S)
-
-    # sort eigenvalues in descending order
-    idx = np.argsort(eigvals)[::-1]
-    eigvals = eigvals[idx]
-    eigvecs = eigvecs[:, idx]
-
-    # Scree plot
-    scree_plot(eigvals, "MDS", './plots/scree_plot_mds.png')
+    eigvals, eigvecs = get_mds_eig_entities(X)
 
     # Generate Nxd reduced dataset
     diag_eigvals = np.diag(np.sqrt(eigvals[:d]))
@@ -162,28 +149,9 @@ def DiffusionMap(X, d, sigma, t):
     :param t: the scale of the diffusion (amount of time steps).
     :return: Nxd reduced data matrix.
     '''
-    X_distances = calculate_distances(X)
-    N, _ = X_distances.shape
-
-    # Create kernel similiary matrix
-    kernel_similarity = np.exp(-X_distances**2 / sigma)
-
-    # Normalize rows of K to form Markov Transition Matrix
-    markov_transition_matrix = kernel_similarity / kernel_similarity.sum(axis=1).reshape(kernel_similarity.shape[1], 1)
-
-    # Diagonalize
-    eigvals, eigvecs = np.linalg.eigh(markov_transition_matrix)
-
-    # sort eigenvalues in descending order
-    idx = np.argsort(eigvals)[::-1]
-    eigvals = eigvals[idx]
-    eigvecs = eigvecs[:, idx]
-
-    # Scree plot
-    scree_plot(eigvals, "Diffusion Maps", './plots/scree_plot_diffusion_maps.png')
+    eigvals, eigvecs = get_diffusion_maps_eig_entites(X, sigma)
 
     # Generate Nxd reduced dataset
-    eigvals = eigvals
     diag_eigvals = np.asarray(np.diag(eigvals[1:(d+1)]**t))
     V = eigvecs[:, 1:(d+1)]
     result = np.dot(V, diag_eigvals)
@@ -196,6 +164,10 @@ def swiss_roll():
     swiss_roll_dataset_distances = calculate_distances(swiss_roll_dataset)
 
     swiss_roll_dataset_mds = MDS(swiss_roll_dataset_distances, 2)
+    # Scree plot
+    eigvals, _ = get_mds_eig_entities(swiss_roll_dataset_distances)
+    scree_plot(eigvals, "MDS", './plots/swiss_roll_scree_plot_mds.png')
+
     plot_data(swiss_roll_dataset, swiss_roll_dataset_mds, color, './plots/plot_data_mds.png')
 
     # For checking my implementation - compared with sklearn results
@@ -203,6 +175,9 @@ def swiss_roll():
     # plot_data(swiss_roll_dataset, swiss_roll_dataset_mds_sklearn, color, './plots/plot_data_mds_sklearn.png')
 
     swiss_roll_dataset_diffusion_map = DiffusionMap(swiss_roll_dataset, 2, 100, 1000)
+    # Scree plot
+    eigvals, _ = get_diffusion_maps_eig_entites(swiss_roll_dataset, 100)
+    scree_plot(eigvals, "Diffusion Maps", './plots/scree_plot_diffusion_maps.png')
     plot_data(swiss_roll_dataset, swiss_roll_dataset_diffusion_map, color, './plots/plot_data_diffusion_map.png')
 
     # For checking my implementation - compared with pydiffmap results
@@ -238,15 +213,36 @@ def faces():
 # End function
 
 
+def noised_dataset():
+    num_samples = 2000
+    orthogonal_matrix_size = 75
+    noise = [0, 0.1, 0.5, 0.9, 1]
+    colors = ['r', 'b', 'g', 'y', 'k']
+    data, orthogonal_matrix = generate_noised_dataset()
+    plt.figure(figsize=(8, 5))
+    for i, n in enumerate(noise):
+        noisy_data = np.dot(data, orthogonal_matrix[:2, :]) + np.random.normal(0, n, size=(num_samples, orthogonal_matrix_size))
+        euclidean_dists = calculate_distances(noisy_data)
+        eigvals, eigvecs = get_mds_eig_entities(euclidean_dists)
+        scree_plot_noised(np.sort(eigvals)[::-1][:60], 60, colors[i], 'MDS', 'Eigenvalues', f'noise={n}')
+        MDS(euclidean_dists, 2)
+    plt.legend(loc='best')
+    plt.show()
+# End function
+
+
 def netflix():
     netflix_challenge = Netflix_Challenge(True, True)
     # netflix_challenge.__inspect__movies__()
     # netflix_challenge.__inspect__rating__()
-    netflix_challenge.__execute_diffusion_maps__(load_pca=True, load_diffusion_maps=False)
-
-    # tsne = TSNE(n_components=3).fit_transform()
-    # plot_with_images(nmf, mat_of_movies_and_users, "Non negative matrix factorization")
-    # clustered_dataset_labels = Birch(n_clusters=1000).fit_predict(nmf)
+    techniques = ('TSNE', 'LLE')
+    interval = [1995.0, 1996.0, 1997.0, 1998.0, 1999.0, 2000.0, 2001.0, 2002.0]
+    # tsne = netflix_challenge.__execute_manifold__(technique=techniques.__getitem__(0), interval=interval)
+    # netflix_challenge.__plot_scatter__(tsne, 'TSNE Scatter', '2D')
+    # lle = netflix_challenge.__execute_manifold__(technique=techniques.__getitem__(1), interval=interval)
+    # netflix_challenge.__plot_scatter__(lle, 'LLE Scatter', '2D')
+    clusters = netflix_challenge.__execute_clustering__(technique=techniques.__getitem__(0), interval=interval)
+    netflix_challenge.__plot_clustering__(clusters)
 # End function
 
 
@@ -257,6 +253,9 @@ def main():
 
     # Faces dataset
     # faces()
+
+    # Noised dataset
+    # noised_dataset()
 
     # Netflix Prize dataset
     netflix()
