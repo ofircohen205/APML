@@ -1,3 +1,4 @@
+import matplotlib.colors as mcolors
 import pickle
 import matplotlib.pyplot as plt
 import os
@@ -291,39 +292,52 @@ def plot_data(dataset, dataset_reduced, color, file_name):
 # End function
 
 
-def scatter_plot_2d(data, genres, all_data=False, label='Scatter'):
+def scatter_plot_2d(data, genres, most_viewed_genres, label='Scatter'):
     fig = plt.figure()
     ax = fig.add_subplot(111)
-    if all_data is False:
-        most_viewed_genres = ['Drama', 'Comedy', 'Romance', 'Thriller', 'Action', 'Crime']
-        cmap = create_random_cmap(most_viewed_genres.__len__())
-        for i, genre in enumerate(most_viewed_genres):
-            idx = np.where(genres == genre)[0]
-            ax.scatter(data[idx, 0], data[idx, 1], label=genre, marker='.', cmap=cmap)
-        ax.set_title(label)
-        plt.legend(loc='best')
-        plt.show()
+    cmap = create_random_cmap(most_viewed_genres.__len__())
+    for i, genre in enumerate(most_viewed_genres):
+        idx = np.where(genres == genre)[0]
+        ax.scatter(data[idx, 0], data[idx, 1], label=genre, marker='.', cmap=cmap)
 
-    else:
-        genres_iter = list(set(genres))
-        cmap = create_random_cmap(len(genres_iter))
-        for i, genre in enumerate(genres_iter):
-            idx = np.where(genres == genre)[0]
-            ax.scatter(data[idx, 0], data[idx, 1], label=genre, marker='.', cmap=cmap)
-        ax.set_title(label)
-        plt.legend(loc='best')
-        plt.show()
+    genres_iter = list(set(genres))
+    cmap = create_random_cmap(len(genres_iter))
+    for i, genre in enumerate(genres_iter):
+        idx = np.where(genres == genre)[0]
+        ax.scatter(data[idx, 0], data[idx, 1], label=genre, marker='.', cmap=cmap)
+    ax.set_title(label)
+    plt.legend(loc='best')
+    plt.show()
 # End function
 
 
-def scatter_plot_3d(data, genres, label='Scatter'):
+def scatter_plot_all(data, genres, label):
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    genres_iter = list(set(genres))
+    cmap = create_random_cmap(len(genres_iter))
+    for i, genre in enumerate(genres_iter):
+        idx = np.where(genres == genre)[0]
+        ax.scatter(data[idx, 0], data[idx, 1], label=genre, marker='.', cmap=cmap)
+    ax.set_title(label)
+    plt.legend(loc='best')
+    plt.show()
+# End function
+
+
+def scatter_plot_3d(data, genres, most_viewed_genres, label='Scatter'):
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
-    most_viewed_genres = ['Drama', 'Comedy', 'Romance', 'Thriller', 'Action', 'Crime']
     for i, genre in enumerate(most_viewed_genres):
         idx = np.where(genres == genre)[0]
         ax.scatter(data[idx, 0], data[idx, 1], label=genre, marker='.')
 
+    other = []
+    for idx, genre in enumerate(genres):
+        if genre not in most_viewed_genres:
+            other.append(idx)
+
+    ax.scatter(data[other, 0], data[other, 1], data[other, 2], marker='.', label='other', alpha=0.05)
     ax.set_title(label)
     plt.legend(loc='best')
     plt.show()
@@ -339,3 +353,23 @@ def create_random_cmap(length):
     cmap._i_under = length
     return cmap
 # End function
+
+
+def get_all_colors():
+    return {
+            'Drama': 'b', 'Comedy': 'y', 'Romance': 'r', 'Thriller': 'g', 'Action': 'c', 'Crime': 'm',
+            'Adventure': mcolors.CSS4_COLORS['slateblue'], 'Documentary': mcolors.CSS4_COLORS['slategray'],
+            'Horror': mcolors.CSS4_COLORS['gold'], 'Sci-Fi': mcolors.CSS4_COLORS['maroon'],
+            'Family': mcolors.CSS4_COLORS['salmon'],
+            'Mystery': mcolors.CSS4_COLORS['lightgreen'], 'Fantasy': mcolors.CSS4_COLORS['sienna'],
+            'Music': mcolors.CSS4_COLORS['teal'],
+            'Animation': mcolors.CSS4_COLORS['pink'], 'Biography': mcolors.CSS4_COLORS['springgreen'],
+            'War': mcolors.CSS4_COLORS['skyblue'], 'History': mcolors.CSS4_COLORS['tomato'],
+            'Musical': mcolors.CSS4_COLORS['linen'],
+            'Sport': mcolors.CSS4_COLORS['olive'], 'Western': mcolors.CSS4_COLORS['crimson'],
+            'Short': mcolors.CSS4_COLORS['azure'], 'Talk-Show': mcolors.CSS4_COLORS['burlywood'],
+            'Film-Noir': mcolors.CSS4_COLORS['orchid'], 'Reality-TV': mcolors.CSS4_COLORS['indigo'],
+            'Game-Show': mcolors.CSS4_COLORS['darkred'],
+            'News': mcolors.CSS4_COLORS['darkcyan']
+        }
+    # End function

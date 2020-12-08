@@ -237,12 +237,12 @@ def netflix():
     # netflix_challenge.__inspect__rating__()
     techniques = ('TSNE', 'LLE')
     interval = [1995.0, 1996.0, 1997.0, 1998.0, 1999.0, 2000.0, 2001.0, 2002.0]
-    # tsne = netflix_challenge.__execute_manifold__(technique=techniques.__getitem__(0), interval=interval)
-    # netflix_challenge.__plot_scatter__(tsne, 'TSNE Scatter', '2D')
+    tsne = netflix_challenge.__execute_manifold__(technique=techniques.__getitem__(0), interval=interval)
+    netflix_challenge.__plot_scatter__(tsne, 'TSNE Scatter', '3D')
     # lle = netflix_challenge.__execute_manifold__(technique=techniques.__getitem__(1), interval=interval)
     # netflix_challenge.__plot_scatter__(lle, 'LLE Scatter', '2D')
-    clusters = netflix_challenge.__execute_clustering__(technique=techniques.__getitem__(0), interval=interval)
-    netflix_challenge.__plot_clustering__(clusters)
+    # clusters = netflix_challenge.__execute_clustering__(technique=techniques.__getitem__(0), interval=interval)
+    # netflix_challenge.__plot_clustering__(clusters)
 # End function
 
 
