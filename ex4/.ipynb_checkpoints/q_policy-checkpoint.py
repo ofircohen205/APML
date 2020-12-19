@@ -1,11 +1,9 @@
 import torch
 import torch.nn.functional as F
-import torch.optim as optim
 from memory import ReplayMemory, Transition
 import random
 from torch.utils.tensorboard import SummaryWriter
 from base_policy import BasePolicy
-from models import SimpleModel
 import gym
 
 
@@ -28,21 +26,15 @@ class QPolicy(BasePolicy):
         if random_number > epsilon:
             # here you do the action-selection magic!
             # YOUR CODE HERE
-            with torch.no_grad():
-                return self.model(state).max(1)[1].view(1, 1)
+            pass
         else:
             return self.action_space.sample()  # return action randomly
 
     def optimize(self, batch_size, global_step=None):
         # optimize your model
+
         if len(self.memory) < batch_size:
             return None
-
-        target_net = SimpleModel()
-        target_net.load_state_dict(self.model.state_dict())
-        target_net.eval()
-
-        optimizer = optim.RMSprop(self.model.parameters())
 
         self.memory.batch_size = batch_size
         for transitions_batch in self.memory:
@@ -57,21 +49,5 @@ class QPolicy(BasePolicy):
             reward_batch = torch.cat(batch.reward)
 
             # do your optimization magic here!
-            # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
-            # columns of actions taken. These are the actions which would've been taken
-            # for each batch state according to policy_net
-            state_action_values = self.model(state_batch).gather(1, action_batch)
-
-            # Compute the expected Q values
-            expected_state_action_values = (next_state_batch * self.gamma) + reward_batch
-
-            # Compute Huber loss
-            loss = F.smooth_l1_loss(state_action_values, expected_state_action_values.unsqueeze(1))
-
-            # Optimize the model
-            optimizer.zero_grad()
-            loss.backward()
-            for param in self.model.parameters():
-                param.grad.data.clamp_(-1, 1)
-            optimizer.step()
+            # YOUR CODE HERE!
 
