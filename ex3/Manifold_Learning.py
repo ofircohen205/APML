@@ -204,8 +204,8 @@ def faces():
     faces_lle = LLE(faces_dataset, 8, 12)
     faces_fig_lle = plot_with_images(faces_lle, faces_dataset, "LLE Faces dataset")
 
-    # faces_diffusion_map = DiffusionMap(faces_dataset, 8, 100, 1000)
-    # faces_fig_diffusion_map = plot_with_images(faces_diffusion_map, faces_dataset, "Diffusion Map Faces dataset")
+    faces_diffusion_map = DiffusionMap(faces_dataset, 8, 100, 1000)
+    faces_fig_diffusion_map = plot_with_images(faces_diffusion_map, faces_dataset, "Diffusion Map Faces dataset")
 
     # For checking my implementation - compared with pydiffmap results
     # faces_fig_diffusion_map_pydiffmap = plot_with_images(faces_diffusion_map_pydiffmap, faces_dataset, "Diffusion Map Faces dataset pydiffmap")
@@ -224,7 +224,7 @@ def noised_dataset():
         noisy_data = np.dot(data, orthogonal_matrix[:2, :]) + np.random.normal(0, n, size=(num_samples, orthogonal_matrix_size))
         euclidean_dists = calculate_distances(noisy_data)
         eigvals, eigvecs = get_mds_eig_entities(euclidean_dists)
-        scree_plot_noised(np.sort(eigvals)[::-1][:60], 60, colors[i], 'MDS', 'Eigenvalues', f'noise={n}')
+        scree_plot_noised(np.sort(eigvals)[::-1][:60], 60, colors[i], f'noise={n}', 'Eigenvalues', 'MDS')
         MDS(euclidean_dists, 2)
     plt.legend(loc='best')
     plt.show()
@@ -237,12 +237,15 @@ def netflix():
     # netflix_challenge.__inspect__rating__()
     techniques = ('TSNE', 'LLE')
     interval = [1995.0, 1996.0, 1997.0, 1998.0, 1999.0, 2000.0, 2001.0, 2002.0]
-    tsne = netflix_challenge.__execute_manifold__(technique=techniques.__getitem__(0), interval=interval)
-    netflix_challenge.__plot_scatter__(tsne, 'TSNE Scatter', '3D')
+
+    # tsne = netflix_challenge.__execute_manifold__(technique=techniques.__getitem__(0), interval=interval)
+    # netflix_challenge.__plot_scatter__(tsne, 'TSNE Scatter', '3D')
+
     # lle = netflix_challenge.__execute_manifold__(technique=techniques.__getitem__(1), interval=interval)
     # netflix_challenge.__plot_scatter__(lle, 'LLE Scatter', '2D')
-    # clusters = netflix_challenge.__execute_clustering__(technique=techniques.__getitem__(0), interval=interval)
-    # netflix_challenge.__plot_clustering__(clusters)
+
+    clusters, reduced_data = netflix_challenge.__execute_clustering__(technique=techniques.__getitem__(0), interval=interval)
+    netflix_challenge.__plot_clustering__(clusters, reduced_data)
 # End function
 
 

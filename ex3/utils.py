@@ -344,6 +344,11 @@ def scatter_plot_3d(data, genres, most_viewed_genres, label='Scatter'):
 # End function
 
 
+def plot_clustering():
+    pass
+# End function
+
+
 def create_random_cmap(length):
     cmap = plt.get_cmap(np.random.choice(["Set1", "Set2", "Set3", "Dark2", "Accent"]))
     cmap.colors = cmap.colors[:length]

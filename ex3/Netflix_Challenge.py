@@ -3,8 +3,8 @@ from mpl_toolkits.mplot3d import Axes3D
 from utils import *
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA, TruncatedSVD
-from sklearn.manifold import TSNE, LocallyLinearEmbedding
-from sklearn.cluster import SpectralClustering
+from sklearn.manifold import TSNE, LocallyLinearEmbedding, locally_linear_embedding
+from sklearn.cluster import SpectralClustering, Birch, AgglomerativeClustering
 
 
 class Netflix_Challenge:
@@ -21,6 +21,7 @@ class Netflix_Challenge:
         self.most_viewed_genres_limit = 6
         self.movies_by_genres = self.df_genres.sum(axis=0, skipna=True).sort_values(ascending=False)
         self.most_viewed_genres = self.movies_by_genres[:self.most_viewed_genres_limit].index.tolist()
+        self.genres = get_ids_by_genres(self.movies_genres_df.shape[0])
     # End init
 
     def __inspect__movies__(self):
@@ -69,9 +70,10 @@ class Netflix_Challenge:
 
     def __execute_clustering__(self, technique, interval):
         manifold_data = self.__execute_manifold__(technique, interval)
-        self.__plot_scatter__(manifold_data, technique, '2D')
-        return SpectralClustering(n_clusters=self.most_viewed_genres.__len__(),
-                           affinity='rbf', n_jobs=-1).fit_predict(manifold_data)
+        self.__save_object__()
+        return Birch(n_clusters=self.most_viewed_genres_limit).fit_predict(manifold_data), manifold_data
+        # return AgglomerativeClustering(n_clusters=self.most_viewed_genres_limit).fit_predict(manifold_data)
+        # return SpectralClustering(n_clusters=self.most_viewed_genres_limit, eigen_solver='arpack', n_jobs=-1).fit_predict(manifold_data)
     # End function
 
     def __execute_manifold__(self, technique, interval):
@@ -85,6 +87,7 @@ class Netflix_Challenge:
 
     def __execute_truncated_SVD__(self, interval, n_components=1000):
         reduced_data = self.__reduce__dataset__(interval)
+        self.limited_genres = self.genres[(np.where(self.most_viewed_movies)[0])]
         print("Reduced dataset shape is: {}".format(reduced_data.shape))
         print("Start TruncatedSVD from scratch")
         self.reduced_data = TruncatedSVD(n_components=n_components, n_iter=10, random_state=42).fit_transform(reduced_data)
@@ -92,7 +95,8 @@ class Netflix_Challenge:
 
     def __execute_lle__(self):
         print("Start LLE from scratch")
-        lle = LocallyLinearEmbedding(n_components=3, n_neighbors=12, n_jobs=-1).fit_transform(self.reduced_data)
+        # lle = LocallyLinearEmbedding(n_components=3, n_neighbors=12, n_jobs=-1).fit_transform(self.reduced_data)
+        lle, _ = locally_linear_embedding(self.reduced_data, n_neighbors=self.most_viewed_genres_limit, n_components=3, n_jobs=-1)
         print("End LLE from scratch")
         return lle
     # End function
@@ -105,34 +109,42 @@ class Netflix_Challenge:
     # End function
 
     def __plot_scatter__(self, manifold_dataset, label, scatter_type):
-        genres = get_ids_by_genres(self.movies_genres_df.shape[0])
-        all_genres = genres[(np.where(self.most_viewed_movies)[0])]
         if scatter_type == '3D':
-            scatter_plot_3d(manifold_dataset, all_genres, self.most_viewed_genres, label)
+            scatter_plot_3d(manifold_dataset, self.limited_genres, self.most_viewed_genres, label)
         else:
-            scatter_plot_2d(manifold_dataset, all_genres, self.most_viewed_genres, label)
+            scatter_plot_2d(manifold_dataset, self.limited_genres, self.most_viewed_genres, label)
     # End function
 
-    def __plot_clustering__(self, clusters_labels):
+    def __plot_clustering__(self, clusters_labels, dataset):
         print("Start plotting Clustering")
-        limited_genres = get_ids_by_genres(self.movies_genres_df.shape[0])[(np.where(self.most_viewed_movies)[0])]
         # Building the label to colour mapping
-        colours = {0: 'b', 1: 'y', 2: 'r', 3: 'g', 4: 'c', 5: 'm'}
+        colours = {0: 'r', 1: 'g', 2: 'b', 3: 'y', 4: 'c', 5: 'm'}
         fig = plt.figure(figsize=(9, 9))
         ax = fig.add_subplot(111)
-        cvec = [colours[label] for label in clusters_labels]
+        color_vec = [colours[label] for label in clusters_labels]
 
+        all = []
         most_viewed_movies = []
-        most_viewed_movies_genres = ['Drama', 'Comedy', 'Romance', 'Thriller', 'Action', 'Crime']
-        for i, genre in enumerate(limited_genres):
-            idx = np.where(limited_genres == genre)[0]
+        for i, genre in enumerate(list(set(self.limited_genres))):
+            if genre is None:
+                continue
+            idx = np.where(self.limited_genres == genre)[0]
             a = ax.scatter(dataset[idx, 0], dataset[idx, 1], label=genre, marker='.', c=get_all_colors()[genre])
-            if genre in most_viewed_movies_genres:
+            if genre in self.most_viewed_genres:
                 most_viewed_movies.append(a)
+            all.append(a)
+
+        ax.legend(tuple(all), tuple(get_all_colors().keys()))
 
         plt.figure(figsize=(9, 9))
-        plt.scatter(dataset[:, 0], dataset[:, 1], c=cvec)
-        plt.legend(tuple(most_viewed_movies), ('Drama', 'Comedy', 'Romance', 'Thriller', 'Action', 'Crime'))
+        plt.scatter(dataset[:, 0], dataset[:, 1], c=color_vec)
+        plt.legend(tuple(most_viewed_movies), tuple(self.most_viewed_genres))
         plt.show()
         print("End plotting Clustering")
     # End function
+
+    def __str__(self):
+        return "Netflix_Challenge.pkl"
+
+    def __save_object__(self):
+        joblib.dump(self, self.__str__())
