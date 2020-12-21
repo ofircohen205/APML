@@ -11,6 +11,7 @@ import sys
 import time
 
 from q_policy import QPolicy
+from monte_carlo_policy_gradient import MonteCarloPolicy
 from snake_wrapper import SnakeWrapper
 from models import SimpleModel, DqnModel, MonteCarloModel
 
@@ -125,8 +126,8 @@ def parse_args():
     p.add_argument('--lr', type=float, default=0.01)
     p.add_argument('-e', '--max_epsilon', type=float, default=0.3, help='for pg, use max_epsilon=0')
     p.add_argument('-g', '--gamma', type=float, default=.3)
-    p.add_argument('-p', '--policy_name', type=str, choices=['dqn', 'pg', 'a2c'], required=True)
-    p.add_argument('-n', '--network_name', type=str, choices=['simple', 'dqn', 'small'], required=True)
+    p.add_argument('-p', '--policy_name', type=str, choices=['dqn', 'monte_carlo', 'pg', 'a2c'], required=True)
+    p.add_argument('-n', '--network_name', type=str, choices=['simple', 'dqn', 'monte_carlo', 'small'], required=True)
 
     args = p.parse_args()
     return args

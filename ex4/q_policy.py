@@ -16,7 +16,6 @@ class QPolicy(BasePolicy):
         super(QPolicy, self).__init__(buffer_size, gamma, model, action_space, summery_writer, lr)
         self.target_model = DqnModel()
         self.i_episode = 0
-        self.target_update = 10
 
     def select_action(self, state, epsilon, global_step=None):
         """
@@ -78,8 +77,4 @@ class QPolicy(BasePolicy):
             #     param.grad.data.clamp_(-1, 1)
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=2)
             optimizer.step()
-
-        self.i_episode += 1
-        if self.i_episode % self.target_update == 0:
-            self.target_model.load_state_dict(self.model.state_dict())
 
