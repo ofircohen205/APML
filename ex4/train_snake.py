@@ -11,7 +11,7 @@ import sys
 
 from q_policy import QPolicy
 from snake_wrapper import SnakeWrapper
-from models import SimpleModel
+from models import SimpleModel, DqnModel, MonteCarloModel
 
 
 def create_model(network_name):
@@ -23,6 +23,10 @@ def create_model(network_name):
     """
     if network_name == 'simple':
         return SimpleModel()
+    elif network_name == 'dqn':
+        return DqnModel()
+    elif network_name == 'monte_carlo':
+        return MonteCarloModel()
     else:
         raise Exception('net {} is not known'.format(network_name))
 
@@ -79,8 +83,9 @@ def train(steps, buffer_size, opt_every,
         writer.add_scalar('training/reward', reward_history[-1], step)
 
         if step % opt_every == opt_every - 1:
-            policy.optimize(batch_size)  # no need for logging, policy logs it's own staff.
+            policy.optimize(batch_size, step)  # no need for logging, policy logs it's own staff.
 
+    torch.save({'model_state_dict': policy.model.state_dict()}, log_dir + '_' + policy_name + '.pkl')
     writer.close()
 
 
@@ -102,7 +107,7 @@ def parse_args():
     p.add_argument('-e', '--max_epsilon', type=float, default=0.3, help='for pg, use max_epsilon=0')
     p.add_argument('-g', '--gamma', type=float, default=.3)
     p.add_argument('-p', '--policy_name', type=str, choices=['dqn', 'pg', 'a2c'], required=True)
-    p.add_argument('-n', '--network_name', type=str, choices=['simple', 'small'], required=True)
+    p.add_argument('-n', '--network_name', type=str, choices=['simple', 'dqn', 'small'], required=True)
 
     args = p.parse_args()
     return args

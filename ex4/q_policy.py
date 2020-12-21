@@ -5,7 +5,7 @@ from memory import ReplayMemory, Transition
 import random
 from torch.utils.tensorboard import SummaryWriter
 from base_policy import BasePolicy
-from models import SimpleModel
+from models import SimpleModel, DqnModel
 import gym
 
 
@@ -14,6 +14,9 @@ class QPolicy(BasePolicy):
     # you should complete it. You can change it however you want.
     def __init__(self, buffer_size, gamma, model, action_space: gym.Space, summery_writer: SummaryWriter, lr):
         super(QPolicy, self).__init__(buffer_size, gamma, model, action_space, summery_writer, lr)
+        self.target_model = DqnModel()
+        self.i_episode = 0
+        self.target_update = 10
 
     def select_action(self, state, epsilon, global_step=None):
         """
@@ -29,7 +32,7 @@ class QPolicy(BasePolicy):
             # here you do the action-selection magic!
             # YOUR CODE HERE
             with torch.no_grad():
-                return self.model(state).max(1)[1].view(1, 1)
+                return self.model(state).max(1)[1].view(1, 1)[0].item()
         else:
             return self.action_space.sample()  # return action randomly
 
@@ -38,10 +41,7 @@ class QPolicy(BasePolicy):
         if len(self.memory) < batch_size:
             return None
 
-        target_net = SimpleModel()
-        target_net.load_state_dict(self.model.state_dict())
-        target_net.eval()
-
+        self.target_model.eval()
         optimizer = optim.RMSprop(self.model.parameters())
 
         self.memory.batch_size = batch_size
@@ -60,10 +60,12 @@ class QPolicy(BasePolicy):
             # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
             # columns of actions taken. These are the actions which would've been taken
             # for each batch state according to policy_net
-            state_action_values = self.model(state_batch).gather(1, action_batch)
+            state_action_values = self.model(state_batch).gather(1, action_batch.reshape(batch_size, 1))
 
             # Compute the expected Q values
-            expected_state_action_values = (next_state_batch * self.gamma) + reward_batch
+            with torch.no_grad():
+                next_state_values = self.model(next_state_batch).max(1)[0].detach()
+                expected_state_action_values = (next_state_values * self.gamma) + reward_batch
 
             # Compute Huber loss
             loss = F.smooth_l1_loss(state_action_values, expected_state_action_values.unsqueeze(1))
@@ -71,7 +73,13 @@ class QPolicy(BasePolicy):
             # Optimize the model
             optimizer.zero_grad()
             loss.backward()
-            for param in self.model.parameters():
-                param.grad.data.clamp_(-1, 1)
+            self.writer.add_scalar('training/loss', loss.item(), global_step)
+            # for param in self.model.parameters():
+            #     param.grad.data.clamp_(-1, 1)
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=2)
             optimizer.step()
+
+        self.i_episode += 1
+        if self.i_episode % self.target_update == 0:
+            self.target_model.load_state_dict(self.model.state_dict())
 

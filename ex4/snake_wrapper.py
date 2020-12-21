@@ -119,8 +119,10 @@ def preprocess_snake_state(board, head_pos, direction, square_size, num_classes)
 
 
 if __name__ == '__main__':
+    from q_policy import QPolicy
     game = SnakeWrapper()
     action_space = SnakeWrapper.action_space
+    policy = QPolicy()
     for i in range(100):
         action = action_space.sample()
         print(f'the {i} action is {action}')
