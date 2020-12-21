@@ -8,6 +8,7 @@ import math
 import argparse
 import os
 import sys
+import time
 
 from q_policy import QPolicy
 from snake_wrapper import SnakeWrapper
@@ -54,6 +55,7 @@ def train(steps, buffer_size, opt_every,
           batch_size, lr, max_epsilon, policy_name, gamma, network_name,
           log_dir):
 
+    reset_every = 50
     model = create_model(network_name)
     game = SnakeWrapper()
     writer = SummaryWriter(log_dir=log_dir)
@@ -85,8 +87,25 @@ def train(steps, buffer_size, opt_every,
         if step % opt_every == opt_every - 1:
             policy.optimize(batch_size, step)  # no need for logging, policy logs it's own staff.
 
-    torch.save({'model_state_dict': policy.model.state_dict()}, log_dir + '_' + policy_name + '.pkl')
+        if step % reset_every == reset_every - 1:
+            state = game.reset()
+
+    torch.save({'model_state_dict': policy.model.state_dict()}, log_dir + '_' + policy_name + '_model.pkl')
     writer.close()
+    # Test game
+    test(policy)
+
+
+def test(policy):
+    game = SnakeWrapper()
+    state = game.reset()
+    for i in range(100):
+        action = policy.select_action(torch.FloatTensor(state), 0)
+        print(f'the {i} action is {action}')
+        state, reward = game.step(action)
+        print('rendered board:')
+        game.render()
+        time.sleep(0.5)
 
 
 def parse_args():
