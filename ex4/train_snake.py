@@ -11,7 +11,6 @@ import sys
 import time
 
 from q_policy import QPolicy
-from monte_carlo_policy_gradient import MonteCarloPolicy
 from snake_wrapper import SnakeWrapper
 from models import SimpleModel, DqnModel, MonteCarloModel
 
@@ -100,14 +99,20 @@ def train(steps, buffer_size, opt_every,
 def test(policy):
     game = SnakeWrapper()
     state = game.reset()
+    total_rewards = []
+    total_deaths = 0
     for i in range(100):
         action = policy.select_action(torch.FloatTensor(state), 0)
         print(f'the {i} action is {action}')
         state, reward = game.step(action)
+        if reward == -5:
+            total_deaths += 1
+        total_rewards.append(reward)
         print('rendered board:')
         game.render()
+        print("rewards so far for player 1: {}".format(sum(total_rewards)))
         time.sleep(0.5)
-
+    print("Total deaths: {}".format(total_deaths))
 
 def parse_args():
     p = argparse.ArgumentParser()
