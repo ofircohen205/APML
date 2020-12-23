@@ -13,11 +13,46 @@ from base_policy import BasePolicy
 from train_snake import *
 
 
-class MonteCarloPolicy(BasePolicy):
+class ActorCriticModel(nn.Module):
+
+    def __init__(self, h=9, w=9, inputs=10, outputs=3):
+        """
+        :param h:
+        :param w:
+        :param outputs: number of actions (3)
+        """
+        super(ActorCriticModel, self).__init__()
+        self.conv1 = nn.Conv2d(inputs, 16, kernel_size=3, stride=1)
+        self.bn1 = nn.BatchNorm2d(16)
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, stride=1)
+        self.bn2 = nn.BatchNorm2d(32)
+        self.conv3 = nn.Conv2d(32, 32, kernel_size=3, stride=1)
+        self.bn3 = nn.BatchNorm2d(32)
+
+        # Number of Linear input connections depends on output of conv2d layers
+        # and therefore the input image size, so compute it.
+        def conv2d_size_out(size, kernel_size=3, stride=1):
+            return (size - (kernel_size - 1) - 1) // stride + 1
+
+        convw = conv2d_size_out(conv2d_size_out(conv2d_size_out(w)))
+        convh = conv2d_size_out(conv2d_size_out(conv2d_size_out(h)))
+        linear_input_size = convw * convh * 32
+        self.head = nn.Linear(linear_input_size, outputs)
+
+    # Called with either one element to determine next action, or a batch
+    # during optimization. Returns tensor([[left0exp,right0exp]...]).
+    def forward(self, x):
+        x = x.permute(0, 3, 1, 2)  # nhwc -> nchw
+        x = F.relu(self.bn1(self.conv1(x)))
+        x = F.relu(self.bn2(self.conv2(x)))
+        x = F.relu(self.bn3(self.conv3(x)))
+        return F.softmax(self.head(x.view(x.size(0), -1)), dim=-1)
+
+class ActorCriticPolicy(BasePolicy):
     # partial code for q-learning
     # you should complete it. You can change it however you want.
     def __init__(self, buffer_size, gamma, model, action_space: gym.Space, summery_writer: SummaryWriter, lr):
-        super(MonteCarloPolicy, self).__init__(buffer_size, gamma, model, action_space, summery_writer, lr)
+        super(ActorCriticPolicy, self).__init__(buffer_size, gamma, model, action_space, summery_writer, lr)
         self.episodes = 0
         self.states = []
         self.actions = []
@@ -39,60 +74,21 @@ class MonteCarloPolicy(BasePolicy):
         :param global_step: used for tensorboard logging
         :return: return single action as integer (0, 1 or 2).
         """
-        with torch.no_grad():
-            action_probs = self.model(state)
-            highest_prob_action = Categorical(logits=action_probs).sample()
-        return highest_prob_action.item()
-
-
+        pass
 
     def optimize(self, batch_size, global_step=None, alpha=None):
-        discounted_rewards = self.discount_rewards(self.rewards)
-        self.batch_rewards.extend(discounted_rewards)
-        self.batch_states.extend(self.states)
-        self.batch_actions.extend(self.actions)
-        self.batch_counter += 1
-        self.total_rewards.append(sum(self.rewards))
-
-        self.optimizer.zero_grad()
-        state_tensor = torch.FloatTensor(self.batch_states)
-        reward_tensor = torch.FloatTensor(self.batch_rewards)
-        # Actions are used as indices, must be LongTensor
-        action_tensor = torch.LongTensor(self.batch_actions)
-
-        # Calculate loss
-        prob = self.model(state_tensor)
-        logprob = torch.log(prob)
-        entropy_factor = alpha * (-torch.sum(prob * logprob))
-        selected_logprobs = reward_tensor * logprob[np.arange(len(action_tensor)), action_tensor] + entropy_factor
-        loss = -selected_logprobs.mean()
-
-        # Calculate gradients
-        loss.backward()
-        self.writer.add_scalar('training/loss', loss.item(), global_step)
-        # torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=2)
-        # Apply gradients
-        self.optimizer.step()
-
-        self.batch_rewards = []
-        self.batch_actions = []
-        self.batch_states = []
-        self.batch_counter = 1
+        pass
 
     def discount_rewards(self, rewards, gamma=0.99):
-        r = np.array([gamma ** i * np.sign(rewards[i]) * np.abs(rewards[i]) for i in range(len(rewards))])
-        # Reverse the array direction for cumsum and then
-        # revert back to the original order
-        r = r[::-1].cumsum()[::-1]
-        return (r - r.mean()) / (r.std() + 1e-9)
+        pass
 
 
-def train_monte_carlo_policy(steps, buffer_size, opt_every, batch_size, lr, max_epsilon, policy_name, gamma, network_name, log_dir):
+def train_policy(steps, buffer_size, opt_every, batch_size, lr, max_epsilon, policy_name, gamma, network_name, log_dir):
     model = create_model(network_name)
     game = SnakeWrapper()
     writer = SummaryWriter(log_dir=log_dir)
     state = game.reset()
-    policy = MonteCarloPolicy(buffer_size, gamma, model, game.action_space, writer, lr)
+    policy = ActorCriticPolicy(buffer_size, gamma, model, game.action_space, writer, lr)
     alpha = 0.3
     total_deaths = 0
     reset_game = False
@@ -107,7 +103,6 @@ def train_monte_carlo_policy(steps, buffer_size, opt_every, batch_size, lr, max_
         writer.add_scalar('training/epsilon', epsilon, step)
         action = policy.select_action(torch.FloatTensor(state), epsilon)
         state, reward = game.step(action)
-        # while (reward != -5 or reward != -1) and policy.episodes <= 200:
         while reward != -5 and policy.episodes <= 200:
             policy.states.append(state[0])
             policy.rewards.append(reward)
@@ -118,8 +113,6 @@ def train_monte_carlo_policy(steps, buffer_size, opt_every, batch_size, lr, max_
                 total_deaths += 1
                 reset_game = True
                 print("Episodes done. total steps: {}".format(policy.episodes))
-            # elif reward == -1:
-            #     print("Food reward bad. should avoid it.")
 
         policy.optimize(batch_size, step, alpha=alpha)  # no need for logging, policy logs it's own staff.
         policy.episodes = 0
@@ -142,5 +135,5 @@ if __name__ == '__main__':
             exit(0)
 
     del args.__dict__['name']
-    train_monte_carlo_policy(**args.__dict__)
+    train_policy(**args.__dict__)
 

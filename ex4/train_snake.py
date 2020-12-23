@@ -13,6 +13,7 @@ import time
 from q_policy import QPolicy
 from snake_wrapper import SnakeWrapper
 from models import SimpleModel, DqnModel, MonteCarloModel
+from advantage_actor_critic import ActorCriticModel
 
 
 def create_model(network_name):
@@ -28,6 +29,8 @@ def create_model(network_name):
         return DqnModel()
     elif network_name == 'monte_carlo':
         return MonteCarloModel()
+    elif network_name == 'a2c':
+        return ActorCriticModel()
     else:
         raise Exception('net {} is not known'.format(network_name))
 
@@ -132,7 +135,7 @@ def parse_args():
     p.add_argument('-e', '--max_epsilon', type=float, default=0.3, help='for pg, use max_epsilon=0')
     p.add_argument('-g', '--gamma', type=float, default=.3)
     p.add_argument('-p', '--policy_name', type=str, choices=['dqn', 'monte_carlo', 'pg', 'a2c'], required=True)
-    p.add_argument('-n', '--network_name', type=str, choices=['simple', 'dqn', 'monte_carlo', 'small'], required=True)
+    p.add_argument('-n', '--network_name', type=str, choices=['simple', 'dqn', 'monte_carlo', 'a2c', 'small'], required=True)
 
     args = p.parse_args()
     return args
