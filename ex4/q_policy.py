@@ -15,6 +15,7 @@ class QPolicy(BasePolicy):
     def __init__(self, buffer_size, gamma, model, action_space: gym.Space, summery_writer: SummaryWriter, lr):
         super(QPolicy, self).__init__(buffer_size, gamma, model, action_space, summery_writer, lr)
         self.target_model = DqnModel()
+        self.optimizer = optim.RMSprop(self.model.parameters())
         self.i_episode = 0
 
     def select_action(self, state, epsilon, global_step=None):
@@ -41,8 +42,6 @@ class QPolicy(BasePolicy):
             return None
 
         self.target_model.eval()
-        optimizer = optim.RMSprop(self.model.parameters())
-
         self.memory.batch_size = batch_size
         for transitions_batch in self.memory:
 
@@ -70,11 +69,11 @@ class QPolicy(BasePolicy):
             loss = F.smooth_l1_loss(state_action_values, expected_state_action_values.unsqueeze(1))
 
             # Optimize the model
-            optimizer.zero_grad()
+            self.optimizer.zero_grad()
             loss.backward()
             self.writer.add_scalar('training/loss', loss.item(), global_step)
             # for param in self.model.parameters():
             #     param.grad.data.clamp_(-1, 1)
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=2)
-            optimizer.step()
+            self.optimizer.step()
 

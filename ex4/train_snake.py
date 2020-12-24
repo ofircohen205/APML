@@ -93,7 +93,6 @@ def train(steps, buffer_size, opt_every,
         if step % reset_every == reset_every - 1:
             state = game.reset()
 
-    torch.save({'model_state_dict': policy.model.state_dict()}, log_dir + '_' + policy_name + '_model.pkl')
     writer.close()
     # Test game
     test(policy)
@@ -105,7 +104,10 @@ def test(policy):
     total_rewards = []
     total_deaths = 0
     for i in range(100):
-        action = policy.select_action(torch.FloatTensor(state), 0)
+        if policy.__class__.__name__ == 'MonteCarloPolicy':
+            action, prob = policy.select_action(torch.FloatTensor(state), 0)
+        else:
+            action = policy.select_action(torch.FloatTensor(state), 0)
         print(f'the {i} action is {action}')
         state, reward = game.step(action)
         if reward == -5:

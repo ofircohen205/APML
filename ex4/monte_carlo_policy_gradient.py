@@ -7,10 +7,14 @@ import torch
 import random
 import gym
 import numpy as np
+from torch.distributions import Bernoulli, Categorical
 from torch.utils.tensorboard import SummaryWriter
-from torch.distributions import Categorical
+from tqdm import trange
+
 from base_policy import BasePolicy
+from snake import THE_DEATH_PENALTY
 from train_snake import *
+from itertools import count
 
 
 class MonteCarloPolicy(BasePolicy):
@@ -18,116 +22,96 @@ class MonteCarloPolicy(BasePolicy):
     # you should complete it. You can change it however you want.
     def __init__(self, buffer_size, gamma, model, action_space: gym.Space, summery_writer: SummaryWriter, lr):
         super(MonteCarloPolicy, self).__init__(buffer_size, gamma, model, action_space, summery_writer, lr)
-        self.episodes = 0
-        self.states = []
-        self.actions = []
+        self.max_episode_num = 1000
+        self.nums_of_steps = []
+        self.avg_num_of_steps = []
+        self.all_rewards = []
+        self.probs = []
         self.rewards = []
-        self.reward_history = []
-        self.total_rewards = []
-        self.batch_rewards = []
-        self.batch_actions = []
-        self.batch_states = []
-        self.batch_counter = 1
-        # Define optimizer
-        self.optimizer = optim.Adam(self.model.parameters(), lr=3e-4)
+        self.actions = []
+        self.optimizer = optim.Adam(self.model.parameters())
 
     def select_action(self, state, epsilon, global_step=None):
-        """
-        select an action to play
-        :param state: 1x9x9x10 (nhwc), n=1, h=w=9, c=10 (types of thing on the board, one hot encoding)
-        :param epsilon: epsilon...
-        :param global_step: used for tensorboard logging
-        :return: return single action as integer (0, 1 or 2).
-        """
-        with torch.no_grad():
-            action_probs = self.model(state)
-            highest_prob_action = Categorical(logits=action_probs).sample()
-        return highest_prob_action.item()
+        action_probs = self.model(state)
+        return Categorical(probs=action_probs).sample().item(), action_probs
 
-
-
-    def optimize(self, batch_size, global_step=None, alpha=None):
-        discounted_rewards = self.discount_rewards(self.rewards)
-        self.batch_rewards.extend(discounted_rewards)
-        self.batch_states.extend(self.states)
-        self.batch_actions.extend(self.actions)
-        self.batch_counter += 1
-        self.total_rewards.append(sum(self.rewards))
-
+    def optimize(self, global_step, alpha=None, normalize=False):
+        objective = self.calculate_objective(alpha=alpha, normalize=normalize)
+        loss = -objective.mean()
         self.optimizer.zero_grad()
-        state_tensor = torch.FloatTensor(self.batch_states)
-        reward_tensor = torch.FloatTensor(self.batch_rewards)
-        # Actions are used as indices, must be LongTensor
-        action_tensor = torch.LongTensor(self.batch_actions)
-
-        # Calculate loss
-        prob = self.model(state_tensor)
-        logprob = torch.log(prob)
-        entropy_factor = alpha * (-torch.sum(prob * logprob))
-        selected_logprobs = reward_tensor * logprob[np.arange(len(action_tensor)), action_tensor] + entropy_factor
-        loss = -selected_logprobs.mean()
-
-        # Calculate gradients
         loss.backward()
         self.writer.add_scalar('training/loss', loss.item(), global_step)
-        # torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=2)
-        # Apply gradients
         self.optimizer.step()
 
-        self.batch_rewards = []
-        self.batch_actions = []
-        self.batch_states = []
-        self.batch_counter = 1
+    def calculate_objective(self, alpha, normalize):
+        discounted_rewards = self.calculate_rewards(normalize)
+        objective = []
+        for t in range(len(self.rewards)):
+            objective.append(torch.log(self.probs[t][0][self.actions[t]]) * discounted_rewards[t] + alpha * Categorical(
+                probs=self.probs[t]).entropy())
 
-    def discount_rewards(self, rewards, gamma=0.99):
-        r = np.array([gamma ** i * np.sign(rewards[i]) * np.abs(rewards[i]) for i in range(len(rewards))])
-        # Reverse the array direction for cumsum and then
-        # revert back to the original order
-        r = r[::-1].cumsum()[::-1]
-        return (r - r.mean()) / (r.std() + 1e-9)
+        objective = torch.cat(objective)
+        return objective
+
+    def calculate_rewards(self, normalize):
+        discounted_rewards = []
+        for t in range(len(self.rewards)):
+            Gt = 0
+            pw = 0
+            for r in self.rewards[t:]:
+                Gt = Gt + self.gamma ** pw * r
+                pw = pw + 1
+            discounted_rewards.append(Gt)
+
+        discounted_rewards = torch.tensor(discounted_rewards)
+        if normalize:
+            discounted_rewards = (discounted_rewards - discounted_rewards.mean()) / (discounted_rewards.std() + 1e-9)
+        return discounted_rewards
+
+    def clear_buffer(self):
+        self.probs = []
+        self.rewards = []
+        self.actions = []
 
 
-def train_monte_carlo_policy(steps, buffer_size, opt_every, batch_size, lr, max_epsilon, policy_name, gamma, network_name, log_dir):
+def train_monte_carlo_policy(steps, buffer_size, opt_every, batch_size, lr, max_epsilon, policy_name, gamma,
+                             network_name, log_dir):
     model = create_model(network_name)
     game = SnakeWrapper()
     writer = SummaryWriter(log_dir=log_dir)
-    state = game.reset()
     policy = MonteCarloPolicy(buffer_size, gamma, model, game.action_space, writer, lr)
-    alpha = 0.3
-    total_deaths = 0
-    reset_game = False
 
-    for step in tqdm(range(steps)):
-        if reset_game:
-            print("Game has been reset")
-            game.reset()
-            reset_game = False
+    prog_bar = trange(policy.max_episode_num, desc='', leave=True)
+    for episode in prog_bar:
+        state = game.reset()
+        state = torch.FloatTensor(state)
+        policy.clear_buffer()
 
-        epsilon = max_epsilon * math.exp(-1. * step / (steps / 2))
-        writer.add_scalar('training/epsilon', epsilon, step)
-        action = policy.select_action(torch.FloatTensor(state), epsilon)
-        state, reward = game.step(action)
-        # while (reward != -5 or reward != -1) and policy.episodes <= 200:
-        while reward != -5 and policy.episodes <= 200:
-            policy.states.append(state[0])
+        epsilon = max_epsilon * math.exp(-1. * episode / (steps / 2))
+        writer.add_scalar('training/epsilon', epsilon, episode)
+
+        for step in range(steps):
+            action, prob = policy.select_action(state, epsilon)
+            state, reward = game.step(action)
+            state = torch.FloatTensor(state)
+            policy.probs.append(prob)
             policy.rewards.append(reward)
             policy.actions.append(action)
-            state, reward = game.step(action)
-            policy.episodes += 1
-            if reward == -5:
-                total_deaths += 1
-                reset_game = True
-                print("Episodes done. total steps: {}".format(policy.episodes))
-            # elif reward == -1:
-            #     print("Food reward bad. should avoid it.")
 
-        policy.optimize(batch_size, step, alpha=alpha)  # no need for logging, policy logs it's own staff.
-        policy.episodes = 0
+            if reward == THE_DEATH_PENALTY:
+                writer.add_scalar('training/episode_length', step, episode)
+                writer.add_scalar('training/episode_rewards', sum(policy.rewards), episode)
+                prog_bar.set_description("Total steps: {}, total reward: {}, average_reward: {}".format
+                                         (step, np.round(np.sum(policy.rewards), decimals=3), np.round(
+                                             np.mean(policy.all_rewards[-5:]), decimals=3)))
+                break
+            policy.nums_of_steps.append(step)
 
-    print("Total deaths in training: {}".format(total_deaths))
-    torch.save({'model_state_dict': policy.model.state_dict()}, log_dir + '_' + policy_name + '_model.pkl')
+        policy.avg_num_of_steps.append(np.mean(policy.nums_of_steps[-5:]))
+        policy.all_rewards.append(np.sum(policy.rewards))
+        policy.optimize(global_step=episode, alpha=0.1)
+
     writer.close()
-    # Test game
     test(policy)
 
 
@@ -136,11 +120,10 @@ if __name__ == '__main__':
     args.log_dir = os.path.join(args.log_dir, args.name)
 
     if os.path.exists(args.log_dir):
-        if query_yes_no('You already have a run called , override?'.format(args.name)):
+        if query_yes_no('You already have a run called {}, override?'.format(args.name)):
             shutil.rmtree(args.log_dir)
         else:
             exit(0)
 
     del args.__dict__['name']
     train_monte_carlo_policy(**args.__dict__)
-
