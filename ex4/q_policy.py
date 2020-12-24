@@ -14,7 +14,6 @@ class QPolicy(BasePolicy):
     # you should complete it. You can change it however you want.
     def __init__(self, buffer_size, gamma, model, action_space: gym.Space, summery_writer: SummaryWriter, lr):
         super(QPolicy, self).__init__(buffer_size, gamma, model, action_space, summery_writer, lr)
-        self.target_model = DqnModel()
         self.optimizer = optim.RMSprop(self.model.parameters())
         self.i_episode = 0
 
@@ -37,14 +36,11 @@ class QPolicy(BasePolicy):
             return self.action_space.sample()  # return action randomly
 
     def optimize(self, batch_size, global_step=None):
-        # optimize your model
         if len(self.memory) < batch_size:
             return None
 
-        self.target_model.eval()
         self.memory.batch_size = batch_size
         for transitions_batch in self.memory:
-
             # transform list of tuples into a tuple of lists.
             # explanation here: https://stackoverflow.com/a/19343/3343043
             batch = Transition(*zip(*transitions_batch))
@@ -54,7 +50,6 @@ class QPolicy(BasePolicy):
             action_batch = torch.cat(batch.action)
             reward_batch = torch.cat(batch.reward)
 
-            # do your optimization magic here!
             # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
             # columns of actions taken. These are the actions which would've been taken
             # for each batch state according to policy_net
@@ -72,8 +67,6 @@ class QPolicy(BasePolicy):
             self.optimizer.zero_grad()
             loss.backward()
             self.writer.add_scalar('training/loss', loss.item(), global_step)
-            # for param in self.model.parameters():
-            #     param.grad.data.clamp_(-1, 1)
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=2)
             self.optimizer.step()
 

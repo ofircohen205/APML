@@ -2,7 +2,7 @@ import shutil
 import numpy as np
 import torch
 import random
-from tqdm import tqdm
+from tqdm import tqdm, trange
 from torch.utils.tensorboard import SummaryWriter
 import math
 import argparse
@@ -13,7 +13,6 @@ import time
 from q_policy import QPolicy
 from snake_wrapper import SnakeWrapper
 from models import SimpleModel, DqnModel, MonteCarloModel
-from advantage_actor_critic import ActorCriticModel
 
 
 def create_model(network_name):
@@ -29,8 +28,6 @@ def create_model(network_name):
         return DqnModel()
     elif network_name == 'monte_carlo':
         return MonteCarloModel()
-    elif network_name == 'a2c':
-        return ActorCriticModel()
     else:
         raise Exception('net {} is not known'.format(network_name))
 
@@ -67,8 +64,10 @@ def train(steps, buffer_size, opt_every,
     state = game.reset()
     state_tensor = torch.FloatTensor(state)
     reward_history = []
+    rewards = []
 
-    for step in tqdm(range(steps)):
+    prog_bar = trange(steps, desc='', leave=True)
+    for step in prog_bar:
 
         # epsilon exponential decay
         epsilon = max_epsilon * math.exp(-1. * step / (steps / 2))
@@ -78,6 +77,7 @@ def train(steps, buffer_size, opt_every,
         action = policy.select_action(state_tensor, epsilon)
         state, reward = game.step(action)
         reward_history.append(reward)
+        rewards.append(reward)
 
         state_tensor = torch.FloatTensor(state)
         reward_tensor = torch.FloatTensor([reward])
@@ -88,7 +88,11 @@ def train(steps, buffer_size, opt_every,
         writer.add_scalar('training/reward', reward_history[-1], step)
 
         if step % opt_every == opt_every - 1:
+            prog_bar.set_description("Total reward: {}, average_reward: {}".format
+                                     (np.round(np.sum(rewards), decimals=3), np.round(
+                                         np.mean(rewards), decimals=3)))
             policy.optimize(batch_size, step)  # no need for logging, policy logs it's own staff.
+            rewards = []
 
         if step % reset_every == reset_every - 1:
             state = game.reset()

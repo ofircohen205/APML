@@ -80,6 +80,8 @@ def train_monte_carlo_policy(steps, buffer_size, opt_every, batch_size, lr, max_
     game = SnakeWrapper()
     writer = SummaryWriter(log_dir=log_dir)
     policy = MonteCarloPolicy(buffer_size, gamma, model, game.action_space, writer, lr)
+    alpha = .1
+    alphas = [1, .1, .01]
 
     prog_bar = trange(policy.max_episode_num, desc='', leave=True)
     for episode in prog_bar:
@@ -87,11 +89,8 @@ def train_monte_carlo_policy(steps, buffer_size, opt_every, batch_size, lr, max_
         state = torch.FloatTensor(state)
         policy.clear_buffer()
 
-        epsilon = max_epsilon * math.exp(-1. * episode / (steps / 2))
-        writer.add_scalar('training/epsilon', epsilon, episode)
-
         for step in range(steps):
-            action, prob = policy.select_action(state, epsilon)
+            action, prob = policy.select_action(state, 0)
             state, reward = game.step(action)
             state = torch.FloatTensor(state)
             policy.probs.append(prob)
@@ -109,7 +108,7 @@ def train_monte_carlo_policy(steps, buffer_size, opt_every, batch_size, lr, max_
 
         policy.avg_num_of_steps.append(np.mean(policy.nums_of_steps[-5:]))
         policy.all_rewards.append(np.sum(policy.rewards))
-        policy.optimize(global_step=episode, alpha=0.1)
+        policy.optimize(global_step=episode, alpha=alpha)
 
     writer.close()
     test(policy)
