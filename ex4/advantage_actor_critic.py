@@ -154,7 +154,7 @@ def train_policy(steps, buffer_size, opt_every, batch_size, lr, max_epsilon, pol
         policy.optimize(global_step=episode, alpha=0.001)
 
     writer.close()
-    policy_test(policy)
+    # policy_test(policy)
 
 
 def policy_test(policy):
