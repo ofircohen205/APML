@@ -9,8 +9,11 @@ import argparse
 import os
 import sys
 import time
+import matplotlib.pyplot as plt
+from torch.distributions import Categorical
 
 from q_policy import QPolicy
+from snake import THE_DEATH_PENALTY
 from snake_wrapper import SnakeWrapper
 from models import SimpleModel, DqnModel, MonteCarloModel
 
@@ -99,29 +102,57 @@ def train(steps, buffer_size, opt_every,
 
     writer.close()
     # Test game
-    test(policy)
+    test_policy(policy, 100, False)
 
 
-def test(policy):
+def test_policy(policy, iterations, render):
     game = SnakeWrapper()
+    action_space = SnakeWrapper.action_space
     state = game.reset()
-    total_rewards = []
-    total_deaths = 0
-    for i in range(100):
-        if policy.__class__.__name__ == 'MonteCarloPolicy':
-            action, prob = policy.select_action(torch.FloatTensor(state), 0)
-        else:
-            action = policy.select_action(torch.FloatTensor(state), 0)
-        print(f'the {i} action is {action}')
-        state, reward = game.step(action)
-        if reward == -5:
-            total_deaths += 1
-        total_rewards.append(reward)
-        print('rendered board:')
+    if render:
         game.render()
-        print("rewards so far for player 1: {}".format(sum(total_rewards)))
-        time.sleep(0.5)
-    print("Total deaths: {}".format(total_deaths))
+
+    total_rewards = []
+    steps_survived = []
+
+    total = 0
+    last = 0
+    for i in range(iterations):
+        action = policy.select_action(torch.FloatTensor(state), 0)
+        state, reward = game.step(action)
+        total += reward
+        if reward == THE_DEATH_PENALTY:
+            steps_survived.append(i - last)
+            total_rewards.append(total)
+            last = i
+
+        if render:
+            game.render()
+
+    # plot reward histogram
+    plt.figure()
+    plt.title("reward histogram")
+    plt.hist(x=total_rewards, bins=100)
+    plt.xlabel("reward")
+    plt.ylabel("count")
+    plt.show()
+
+    # plot steps histogram
+    plt.figure()
+    plt.title("steps histogram")
+    plt.hist(x=steps_survived, bins=100)
+    plt.xlabel("# of steps")
+    plt.ylabel("count")
+    plt.show()
+
+    # plot 2d histogram
+    plt.figure()
+    plt.title("step vs rewards histogram")
+    plt.hist2d(x=steps_survived, y=total_rewards, bins=100)
+    plt.xlabel("# of steps")
+    plt.ylabel("reward")
+    plt.show()
+
 
 def parse_args():
     p = argparse.ArgumentParser()

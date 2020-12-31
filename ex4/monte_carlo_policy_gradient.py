@@ -81,13 +81,16 @@ def train_monte_carlo_policy(steps, buffer_size, opt_every, batch_size, lr, max_
     game = SnakeWrapper()
     writer = SummaryWriter(log_dir=log_dir)
     policy = MonteCarloPolicy(buffer_size, gamma, model, game.action_space, writer, lr)
-    alpha = .1
 
     prog_bar = trange(policy.max_episode_num, desc='', leave=True)
     for episode in prog_bar:
         state = game.reset()
         state = torch.FloatTensor(state)
         policy.clear_buffer()
+
+        # epsilon exponential decay
+        epsilon = max_epsilon * math.exp(-1. * episode / (steps / 2))
+        writer.add_scalar('training/epsilon', epsilon, episode)
 
         for step in range(steps):
             action, prob = policy.select_action(state, 0)
@@ -108,10 +111,61 @@ def train_monte_carlo_policy(steps, buffer_size, opt_every, batch_size, lr, max_
 
         policy.avg_num_of_steps.append(np.mean(policy.nums_of_steps[-5:]))
         policy.all_rewards.append(np.sum(policy.rewards))
-        policy.optimize(global_step=episode, alpha=alpha)
+        policy.optimize(global_step=episode, alpha=epsilon)
 
     writer.close()
-    test(policy)
+    test_pg(policy, 100, False)
+
+
+def test_pg(policy, iterations, render):
+    game = SnakeWrapper()
+    action_space = SnakeWrapper.action_space
+    state = game.reset()
+    if render:
+        game.render()
+
+    total_rewards = []
+    steps_survived = []
+
+    total = 0
+    last = 0
+    for i in range(iterations):
+        _, policy_dist = policy.select_action(torch.FloatTensor(state), 0)
+        action = Categorical(probs=policy_dist).sample().item()
+        state, reward = game.step(action)
+        if reward == THE_DEATH_PENALTY:
+            steps_survived.append(i - last)
+            total_rewards.append(total)
+            total = 0
+            last = i
+        else:
+            total += reward
+        if render:
+            game.render()
+
+    # plot reward histogram
+    plt.figure()
+    plt.title("reward histogram")
+    plt.hist(x=total_rewards, bins=100)
+    plt.xlabel("reward")
+    plt.ylabel("count")
+    plt.show()
+
+    # plot steps histogram
+    plt.figure()
+    plt.title("steps histogram")
+    plt.hist(x=steps_survived, bins=100)
+    plt.xlabel("# of steps")
+    plt.ylabel("count")
+    plt.show()
+
+    # plot 2d histogram
+    plt.figure()
+    plt.title("step vs rewards histogram")
+    plt.hist2d(x=steps_survived, y=total_rewards, bins=100)
+    plt.xlabel("# of steps")
+    plt.ylabel("reward")
+    plt.show()
 
 
 if __name__ == '__main__':
