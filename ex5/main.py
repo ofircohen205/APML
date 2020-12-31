@@ -41,11 +41,9 @@ def train(mnist_model: MNIST, mnist_loader: DataLoader, glo_generator: Generator
             zi.data = class_content_tensor[idx]
 
             optimizer.zero_grad()
-            # num = np.random.randint(0, batch_size)
-            # rec = glo_generator(zi)[idx]
-            rec = glo_generator(zi)
+            rec = glo_generator(class_content_tensor)
             loss = l1_loss(rec, Xi)
-            loss += l2_loss(rec, Xi)
+            # loss += l2_loss(rec, Xi)
             loss.backward()
             optimizer.step()
 
