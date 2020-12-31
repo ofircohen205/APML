@@ -3,6 +3,21 @@ import torch
 from torch import nn
 import torch.nn.functional as fnn
 from torch.autograd import Variable
+from matplotlib import pyplot as plt
+
+
+def show_image(img, title):
+    img = img.squeeze()
+    plt.imshow(img)
+    plt.title(title)
+    plt.show()
+# End function
+
+
+def project_l2_ball(z):
+    """ project the vectors in z onto the l2 unit norm ball"""
+    return z / np.maximum(np.sqrt(np.sum(z**2, axis=1))[:, np.newaxis], 1)
+# End function
 
 
 def build_gauss_kernel(size=5, sigma=1.0, n_channels=1):
@@ -18,13 +33,15 @@ def build_gauss_kernel(size=5, sigma=1.0, n_channels=1):
     # and since we have depth-separable convolution we want the groups dimension to be 1
     kernel = torch.FloatTensor(kernel[:, None, :, :])
     return Variable(kernel, requires_grad=False)
+# End function
 
 
 def conv_gauss(img, kernel):
     """ convolve img with a gaussian kernel that has been built with build_gauss_kernel """
     n_channels, _, kw, kh = kernel.shape
-    img = fnn.pad(img, (kw // 2, kh // 2, kw // 2, kh // 2), mode='replicate')
+    img = fnn.pad(img, (kw // 2, kh // 2, kw // 2, kh // 2), mode='constant')
     return fnn.conv2d(img, kernel, groups=n_channels)
+# End function
 
 
 def laplacian_pyramid(img, kernel, max_levels=5):
@@ -39,6 +56,7 @@ def laplacian_pyramid(img, kernel, max_levels=5):
 
     pyr.append(current)
     return pyr
+# End function
 
 
 class LapLoss(nn.Module):

@@ -30,7 +30,8 @@ class MNIST(torch.utils.data.Dataset):
         return sample
 
     @staticmethod
-    def present(img):
+    def present(img, title):
         img = img.squeeze()
         plt.imshow(img)
+        plt.title(title)
         plt.show()

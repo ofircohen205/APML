@@ -37,7 +37,7 @@ class GeneratorForMnistGLO(nn.Module):
         return self.net(code)
 
     def test(self):
-        code_dim = 50
+        code_dim = 2000
         batch_size = 32
         random_tensor = torch.rand(batch_size, code_dim)
         print(f'the shape of the code is {random_tensor.shape}')
