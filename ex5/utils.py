@@ -4,74 +4,59 @@ from torch import nn
 import torch.nn.functional as fnn
 from torch.autograd import Variable
 from matplotlib import pyplot as plt
+import sys
+import argparse
 
 
-def show_image(img, title):
-    img = img.squeeze()
-    plt.imshow(img)
-    plt.title(title)
-    plt.show()
+def parse_args():
+    p = argparse.ArgumentParser()
+
+    # tensorboard
+    p.add_argument('--name', type=str, required=True, help='the name of this run')
+    p.add_argument('--log_dir', type=str, required=True, help='directory for tensorboard logs (common to many runs)')
+
+    # loop
+    p.add_argument('-e', '--epochs', type=int, default=50, help='number of epochs')
+
+    # opt
+    p.add_argument('--batch_size', type=int, default=128)
+    p.add_argument('--code_dim', type=int, default=128)
+    p.add_argument('--lr', type=float, default=1e-3)
+    p.add_argument('--stddev', type=float, default=.3)
+
+    args = p.parse_args()
+    return args
+
+
+def query_yes_no(question, default="yes"):
+    """Ask a yes/no question via raw_input() and return their answer.
+
+    "question" is a string that is presented to the user.
+    "default" is the presumed answer if the user just hits <Enter>.
+        It must be "yes" (the default), "no" or None (meaning
+        an answer is required of the user).
+
+    The "answer" return value is True for "yes" or False for "no".
+    """
+    valid = {"yes": True, "y": True, "ye": True,
+             "no": False, "n": False}
+    if default is None:
+        prompt = " [y/n] "
+    elif default == "yes":
+        prompt = " [Y/n] "
+    elif default == "no":
+        prompt = " [y/N] "
+    else:
+        raise ValueError("invalid default answer: '%s'" % default)
+
+    while True:
+        sys.stdout.write(question + prompt)
+        choice = input().lower()
+        if default is not None and choice == '':
+            return valid[default]
+        elif choice in valid:
+            return valid[choice]
+        else:
+            sys.stdout.write("Please respond with 'yes' or 'no' "
+                             "(or 'y' or 'n').\n")
 # End function
-
-
-def project_l2_ball(z):
-    """ project the vectors in z onto the l2 unit norm ball"""
-    return z / np.maximum(np.sqrt(np.sum(z**2, axis=1))[:, np.newaxis], 1)
-# End function
-
-
-def build_gauss_kernel(size=5, sigma=1.0, n_channels=1):
-    if size % 2 != 1:
-        raise ValueError("kernel size must be uneven")
-    grid = np.float32(np.mgrid[0:size, 0:size].T)
-    gaussian = lambda x: np.exp((x - size // 2) ** 2 / (-2 * sigma ** 2)) ** 2
-    kernel = np.sum(gaussian(grid), axis=2)
-    kernel /= np.sum(kernel)
-    # repeat same kernel across depth dimension
-    kernel = np.tile(kernel, (n_channels, 1, 1))
-    # conv weight should be (out_channels, groups/in_channels, h, w),
-    # and since we have depth-separable convolution we want the groups dimension to be 1
-    kernel = torch.FloatTensor(kernel[:, None, :, :])
-    return Variable(kernel, requires_grad=False)
-# End function
-
-
-def conv_gauss(img, kernel):
-    """ convolve img with a gaussian kernel that has been built with build_gauss_kernel """
-    n_channels, _, kw, kh = kernel.shape
-    img = fnn.pad(img, (kw // 2, kh // 2, kw // 2, kh // 2), mode='constant')
-    return fnn.conv2d(img, kernel, groups=n_channels)
-# End function
-
-
-def laplacian_pyramid(img, kernel, max_levels=5):
-    current = img
-    pyr = []
-
-    for level in range(max_levels):
-        filtered = conv_gauss(current, kernel)
-        diff = current - filtered
-        pyr.append(diff)
-        current = fnn.avg_pool2d(filtered, 2)
-
-    pyr.append(current)
-    return pyr
-# End function
-
-
-class LapLoss(nn.Module):
-    def __init__(self, max_levels=3, k_size=5, sigma=2.0):
-        super(LapLoss, self).__init__()
-        self.max_levels = max_levels
-        self.k_size = k_size
-        self.sigma = sigma
-        self._gauss_kernel = None
-
-    def forward(self, input, target):
-        if self._gauss_kernel is None or self._gauss_kernel.shape[1] != input.shape[1]:
-            self._gauss_kernel = build_gauss_kernel(
-                size=self.k_size, sigma=self.sigma, n_channels=input.shape[1])
-
-        pyr_input = laplacian_pyramid(input, self._gauss_kernel, self.max_levels)
-        pyr_target = laplacian_pyramid(target, self._gauss_kernel, self.max_levels)
-        return sum(fnn.l1_loss(a, b) for a, b in zip(pyr_input, pyr_target))
