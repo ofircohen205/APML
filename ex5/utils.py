@@ -15,12 +15,11 @@ def parse_args():
     p.add_argument('--name', type=str, required=True, help='the name of this run')
     p.add_argument('--log_dir', type=str, required=True, help='directory for tensorboard logs (common to many runs)')
 
-    # loop
     p.add_argument('-e', '--epochs', type=int, default=50, help='number of epochs')
-
-    # opt
-    p.add_argument('--batch_size', type=int, default=128)
-    p.add_argument('--code_dim', type=int, default=128)
+    p.add_argument('--num_samples', type=int, default=2000, help='number of samples from dataset')
+    p.add_argument('--batch_size', type=int, default=64)
+    p.add_argument('--content_dim', type=int, default=32)
+    p.add_argument('--class_dim', type=int, default=64)
     p.add_argument('--lr', type=float, default=1e-3)
     p.add_argument('--stddev', type=float, default=.3)
 
